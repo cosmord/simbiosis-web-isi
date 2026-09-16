@@ -15,6 +15,7 @@ import {
   ListChecks,
   Loader2,
   Pencil,
+  Printer,
   Trash2,
   Users,
 } from 'lucide-react'
@@ -269,8 +270,8 @@ export function RecipeDetail({ id }: { id: string }) {
       </Button>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        {/* Columna principal */}
-        <div className="space-y-5 lg:col-span-3">
+        {/* Columna principal (marcada para impresión: Imprimir receta) */}
+        <div className="print-recipe space-y-5 lg:col-span-3">
           <div className="relative h-60 overflow-hidden rounded-2xl border sm:h-80 lg:h-96">
             <ImageWithFallback
               src={data.image}
@@ -377,8 +378,8 @@ export function RecipeDetail({ id }: { id: string }) {
             </Card>
           </div>
 
-          {/* Valoraciones de la comunidad */}
-          <Card>
+          {/* Valoraciones de la comunidad (ocultas al imprimir) */}
+          <Card className="print:hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Valoraciones ({data.ratingCount})</CardTitle>
             </CardHeader>
@@ -412,8 +413,8 @@ export function RecipeDetail({ id }: { id: string }) {
             </CardContent>
           </Card>
 
-          {/* Comentarios */}
-          <Card>
+          {/* Comentarios (ocultos al imprimir) */}
+          <Card className="print:hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Comentarios ({data.comments.length})</CardTitle>
             </CardHeader>
@@ -542,6 +543,15 @@ export function RecipeDetail({ id }: { id: string }) {
                 <Heart aria-hidden="true" className={cn('size-4', favorite && 'fill-rose-500 text-rose-500')} />
                 {favorite ? 'Guardada en favoritos' : 'Guardar en favoritos'}
                 <span className="ml-auto text-xs text-muted-foreground">{data.favoritesCount}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full min-h-11 justify-start text-muted-foreground hover:text-foreground print:hidden"
+                onClick={() => window.print()}
+                aria-label="Imprimir esta receta"
+              >
+                <Printer aria-hidden="true" className="size-4" />
+                Imprimir receta
               </Button>
               <Button
                 variant="ghost"

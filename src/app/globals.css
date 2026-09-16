@@ -156,3 +156,52 @@
 ::selection {
   background: color-mix(in oklch, var(--primary) 22%, transparent);
 }
+
+/* ---------------------------------------------------------------------------
+   Impresión de recetas: al pulsar «Imprimir receta» en el detalle solo se
+   imprime la columna principal (.print-recipe): foto, título, ingredientes y
+   pasos. Se fuerza fondo blanco y texto oscuro para un PDF/papel legible.
+--------------------------------------------------------------------------- */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-recipe,
+  .print-recipe * {
+    visibility: visible !important;
+  }
+
+  .print-recipe {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    color: #1c1917 !important;
+  }
+
+  .print-recipe * {
+    color: #1c1917 !important;
+    background-color: transparent !important;
+    border-color: #d6d3d1 !important;
+    box-shadow: none !important;
+  }
+
+  .print-recipe img {
+    max-height: 90mm;
+    object-fit: cover;
+    border-radius: 8px !important;
+  }
+
+  .print-recipe .rounded-2xl {
+    border-radius: 10px !important;
+  }
+}

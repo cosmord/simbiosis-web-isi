@@ -7,13 +7,19 @@ import {
   ArrowRight,
   BadgeCheck,
   BookOpenCheck,
+  CalendarDays,
   CalendarHeart,
   ChefHat,
+  Cookie,
   Eye,
   HeartPulse,
   MessagesSquare,
+  Moon,
+  Plus,
   Search,
   Sparkles,
+  Sun,
+  Sunrise,
   UtensilsCrossed,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -26,8 +32,30 @@ import { EmptyState } from './empty-state'
 import { UserAvatar } from './user-bits'
 import { api } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
-import { PUBLICATION_CATEGORIES, type PublicationCardData, type RecipeCardData, type ThreadCardData } from '@/lib/types'
+import {
+  PUBLICATION_CATEGORIES,
+  PLAN_SLOTS,
+  type PlanItemData,
+  type PlanSlot,
+  type PublicationCardData,
+  type RecipeCardData,
+  type ThreadCardData,
+} from '@/lib/types'
 import { relativeTime } from '@/lib/format'
+
+const SLOT_ICONS: Record<PlanSlot, typeof Sunrise> = {
+  BREAKFAST: Sunrise,
+  LUNCH: Sun,
+  DINNER: Moon,
+  SNACK: Cookie,
+}
+
+const SLOT_HUES: Record<PlanSlot, string> = {
+  BREAKFAST: 'bg-amber-400/15 text-amber-600 dark:text-amber-400',
+  LUNCH: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  DINNER: 'bg-teal-500/15 text-teal-600 dark:text-teal-300',
+  SNACK: 'bg-orange-400/15 text-orange-600 dark:text-orange-400',
+}
 
 const STEPS = [
   {
@@ -152,6 +180,9 @@ export function HomeView() {
 
       {/* Estadísticas y criterios de éxito */}
       <StatsBanner />
+
+      {/* Menú de hoy (solo usuarios con sesión) */}
+      <TodayMenuCard />
 
       {/* Recetas destacadas */}
       <section aria-labelledby="home-recipes-title">
@@ -332,6 +363,130 @@ export function HomeView() {
         </div>
       </section>
     </div>
+  )
+}
+
+const LONG_DATE_FORMAT = new Intl.DateTimeFormat('es-ES', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+})
+
+/**
+ * Widget «Menú de hoy»: muestra las 4 franjas del día actual según el plan
+ * semanal del usuario con sesión iniciada, con accesos rápidos al planificador.
+ */
+function TodayMenuCard() {
+  const { user, navigate } = useSimbiosis()
+  const [items, setItems] = useState<PlanItemData[] | null>(null)
+  const [today, setToday] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+    const t = setTimeout(() => setToday((new Date().getDay() + 6) % 7), 0)
+    api<{ items: PlanItemData[] }>('/api/plan')
+      .then((d) => setItems(d.items))
+      .catch(() => setItems([]))
+    return () => clearTimeout(t)
+  }, [user])
+
+  if (!user) return null
+
+  const todayItems = today === null ? [] : (items ?? []).filter((it) => it.day === today)
+  const loading = items === null
+
+  return (
+    <section aria-labelledby="today-menu-title">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Card className="overflow-hidden border-primary/25 bg-gradient-to-br from-primary/[0.06] via-transparent to-accent/40 py-0">
+          <div className="flex flex-wrap items-center gap-2 border-b border-primary/15 bg-primary/[0.06] px-5 py-3.5">
+            <CalendarDays aria-hidden="true" className="size-4.5 text-primary" />
+            <h2 id="today-menu-title" className="text-base font-bold tracking-tight">
+              Tu menú de hoy
+            </h2>
+            <span className="text-sm text-muted-foreground first-letter:uppercase">
+              {today !== null ? LONG_DATE_FORMAT.format(new Date()) : ''}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto min-h-9 shrink-0 text-primary hover:text-primary"
+              onClick={() => navigate('plan')}
+              aria-label="Abrir mi plan semanal"
+            >
+              Ver plan completo
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Button>
+          </div>
+
+          <CardContent className="grid gap-2.5 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)
+              : PLAN_SLOTS.map(({ value, label }) => {
+                  const item = todayItems.find((it) => it.slot === value)
+                  const Icon = SLOT_ICONS[value]
+                  return item ? (
+                    <button
+                      key={value}
+                      type="button"
+                      className="flex items-center gap-2.5 rounded-xl border bg-background/70 p-3 text-left outline-none transition-colors hover:border-primary/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => navigate('recipeDetail', { id: item.recipe.id })}
+                      aria-label={`Ver ${item.recipe.title} (${label.toLowerCase()} de hoy)`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${SLOT_HUES[value]}`}
+                      >
+                        <Icon className="size-4.5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {label}
+                        </span>
+                        <span className="block truncate text-sm font-medium">{item.recipe.title}</span>
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      key={value}
+                      type="button"
+                      className="flex items-center gap-2.5 rounded-xl border border-dashed bg-background/40 p-3 text-left outline-none transition-colors hover:border-primary/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => navigate('plan')}
+                      aria-label={`Añadir receta al ${label.toLowerCase()} de hoy en el planificador`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground"
+                      >
+                        <Plus className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {label}
+                        </span>
+                        <span className="block truncate text-sm text-muted-foreground">
+                          Hueco libre
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+          </CardContent>
+
+          {!loading && todayItems.length === 0 && (
+            <p className="px-5 pb-4 text-sm text-muted-foreground">
+              {(items?.length ?? 0) === 0
+                ? 'Todavía no has planificado nada. Organiza tu semana y genera tu lista de la compra automáticamente.'
+                : 'Hoy no tienes recetas asignadas. Puedes añadir desayuno, comida, cena y snack desde el planificador.'}
+            </p>
+          )}
+        </Card>
+      </motion.div>
+    </section>
   )
 }
 

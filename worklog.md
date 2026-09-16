@@ -247,3 +247,37 @@ Stage Summary:
 - Cuentas demo (contraseña simbiosis123): coordinador@ / nutricionista@ / medico@ / paciente@ / cuidador@simbiosis.org.
 - Riesgos/notas: (a) la paginación ordena en JS sobre el conjunto filtrado (aceptable a escala demo; migrar a ORDER BY en SQL si crece); (b) los correos son simulados (registrados en BD, no se envía nada real); (c) tras db:push recordar reiniciar el dev server.
 - Recomendaciones siguiente ronda: exportación del plan semanal (lista de la compra) a PDF/CSV; recordatorios del plan (generar notificación con el menú del día); moderación: acciones rápidas en línea sin diálogo; i18n multi-idioma; paginar también comentarios/valoraciones del detalle de receta si crece.
+
+---
+Task ID: 9
+Agent: main (cron webDevReview — ronda de revisión continua #4)
+Task: QA de regresión + "Menú de hoy" (inicio + planificador) + exportar lista de la compra a CSV + acciones rápidas de moderación + imprimir receta
+
+Work Log:
+- QA de regresión con agent-browser (escritorio 1440x900 y móvil 390x844, modo claro y oscuro): home, recetas, detalle, login con chips demo, foro, consejos, diario de salud, planificador y panel de coordinación. Cero errores de consola en todas las vistas.
+- Bug corregido: la receta «Puré de zanahoria y manzana» (creada en la demo E2E de la ronda 6) estaba con image:'' → generada foto con IA (z-ai image CLI, 1024x1024, public/images/recipes/pure-zanahoria.png) y asignada en BD. Las 9 recetas tienen foto.
+- NUEVO: widget «Tu menú de hoy» en la página de inicio (home-view.tsx):
+  - Para usuarios con sesión: tarjeta con degradado suave (borde primary/25) tras el banner de estadísticas. Cabecera con icono calendario, fecha larga es-ES ("miércoles, 16 de septiembre") y botón "Ver plan completo".
+  - 4 franjas del día (desayuno/comida/cena/snack) con iconos de colores (ámbar/esmeralda/teal/naranja): si hay receta → clicable al detalle; si no → "Hueco libre" punteado que lleva al planificador. Mensaje de estado vacío diferenciado (plan vacío vs. día vacío). Skeletons de carga. Oculto para visitantes anónimos.
+  - El día actual se calcula con (getDay()+6)%7 (lunes=0) tras montar (setTimeout 0) para evitar mismatch de hidratación y la regla react-hooks/set-state-in-effect.
+- NUEVO en el planificador (plan-view.tsx):
+  - Tarjeta del día actual resaltada: badge ámbar "Hoy" junto al nombre del día + ring-2 ring-primary/30 + shadow.
+  - Exportación de la lista de la compra a CSV: botón "CSV" junto a "Copiar lista". CSV cliente con BOM UTF-8, separador ";" y campos entrecomillados/escapados (compatible Excel-es), filename lista-compra-simbiosis-YYYY-MM-DD.csv. Verificada la lógica de escape en navegador; patrón idéntico al export del diario de salud.
+- NUEVO: acciones rápidas de moderación en el panel de coordinación (coordinator-view.tsx):
+  - En cada denuncia ABIERTA, fila de acciones en línea: "Desestimar" (directo, riesgo bajo), "Eliminar contenido" (con AlertDialog de confirmación que muestra el título del contenido y avisa de que notifica al autor), y "Revisar y actuar…" (diálogo completo con nota interna + suspensión de usuario, como antes).
+  - resolve() acepta ahora nota explícita opcional (notaText) para las acciones rápidas sin diálogo; el diálogo sigue usando el textarea.
+  - Flujos verificados E2E: desestimar rápido funciona (toast + lista actualizada) y el AlertDialog de retirada muestra/cancela correctamente. La denuncia de demo desestimada durante la prueba fue restaurada a OPEN (UPDATE SQL por id cmu3wkd2w003swx7o2nxwkdpy) para conservar el estado de demostración.
+  - Nota técnica: bun CLI resolvió un @prisma/client erróneo (caché global 7.10.0 vs proyecto 6.19.x) al ejecutar scripts one-off fuera de node_modules → usar siempre cwd del proyecto; si hace falta, $executeRawUnsafe evita la validación de campos.
+- NUEVO: "Imprimir receta" en el detalle (recipe-detail.tsx + globals.css):
+  - Botón con icono Printer en la tarjeta de acciones (print:hidden para no salir en el papel). window.print().
+  - Hoja de estilos @media print en globals.css: patrón visibility (body * hidden; .print-recipe visible; posición absoluta ancho completo), @page margin 16mm, fondo blanco y texto stone-900 forzados, bordes stone-300, sin sombras, imagen limitada a 90mm. La columna principal lleva .print-recipe; las tarjetas de Valoraciones y Comentarios llevan print:hidden.
+  - Verificado con agent-browser pdf (render usa print media): página 1 con foto/badges/título/meta/ingredientes y página 2 con preparación; sin navbar, sidebar, comentarios ni footer.
+- Incidencia de entorno resuelta: tras editar globals.css el dev server servía el chunk CSS obsoleto (0 reglas print). Reinicio con cache clear (.next/cache + .next/static) + touch de los fuentes + petición de recompilación forzada lo solucionó; patrón para futuras ediciones de CSS "no hot-reloaded".
+- Limpieza: eliminados los scripts one-off prisma/fix-pure-image.ts, prisma/restore-report.ts y prisma/reports-dbg.ts tras su uso. bun run lint sin errores. dev.log sin errores de runtime. /api/stats: 10 usuarios, 9 recetas, 33,3 % pro, 4,5/5, 100 % satisfacción.
+
+Stage Summary:
+- Nuevas funcionalidades OPERATIVAS y verificadas: widget "Tu menú de hoy" en inicio, resaltado "Hoy" en el planificador, exportación CSV de la lista de la compra, acciones rápidas de moderación (desestimar en línea + retirar contenido con confirmación) e impresión limpia de recetas.
+- Estado BD: 10 usuarios, 9 recetas (todas con foto), 4 hilos, 4 publicaciones, 1 denuncia OPEN de demo (respuesta riesgosa, restaurada tras la prueba), 2 DISMISSED + 1 RESOLVED históricas, correos y notificaciones de demo intactos. El modo oscuro ya existía (ThemeProvider en page.tsx + toggle en navbar) y se revalidó sin problemas.
+- Cuentas demo (contraseña simbiosis123): coordinador@ / nutricionista@ / medico@ / paciente@ / cuidador@simbiosis.org.
+- Riesgos/notas: (a) al editar globals.css puede hacer falta touch + recarga forzada o reinicio con borrado de .next/cache para que Turbopack resirva el CSS; (b) bun CLI + scripts one-off fuera del proyecto resuelven mal @prisma/client (usar cwd del proyecto o SQL crudo); (c) la descarga del CSV no se pudo verificar con fichero en disco en el sandbox headless (blob + anchor click), pero el contenido/escape se validó por eval y el patrón es el mismo que el export del diario verificado en la ronda 7.
+- Recomendaciones siguiente ronda: notificación/recordatorio programado con el menú del día (cron interno o al primer arranque del día); exportar el PLAN completo (7 días) a PDF imprimible reutilizando el patrón @media print; i18n multi-idioma (el doc pide decidir idiomas); paginar comentarios/valoraciones si crecen; test de accesibilidad (aria-live en toasts ya cubierto por sonner, revisar foco en diálogos anidados).

@@ -7,6 +7,7 @@ import {
   Check,
   ClipboardCopy,
   Cookie,
+  Download,
   Loader2,
   Moon,
   Plus,
@@ -95,6 +96,9 @@ export function PlanView() {
   const [picker, setPicker] = useState<{ day: number; slot: PlanSlot } | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  // Día actual (0 = lunes … 6 = domingo). Se resuelve tras montar para evitar
+  // discrepancias de hidratación entre servidor y cliente.
+  const [today, setToday] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -113,6 +117,11 @@ export function PlanView() {
     if (user) void load()
     else setLoading(false)
   }, [user, load])
+
+  useEffect(() => {
+    const t = setTimeout(() => setToday((new Date().getDay() + 6) % 7), 0)
+    return () => clearTimeout(t)
+  }, [])
 
   const shoppingList = useMemo(() => buildShoppingList(items ?? []), [items])
 
@@ -159,6 +168,22 @@ export function PlanView() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo vaciar el plan.')
     }
+  }
+
+  /** Descarga la lista de la compra como CSV compatible con Excel-es (BOM + ";"). */
+  function exportCsv() {
+    if (shoppingList.length === 0) return
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+    const rows = ['Ingrediente;Raciones que lo usan']
+    for (const e of shoppingList) rows.push(`${esc(e.label)};${e.count}`)
+    const csv = '\uFEFF' + rows.join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `lista-compra-simbiosis-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Lista de la compra exportada a CSV.')
   }
 
   async function copyList() {
@@ -258,9 +283,23 @@ export function PlanView() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, delay: day * 0.03 }}
               >
-                <Card className={cn('h-full', filled === 4 && 'border-primary/40')}>
+                <Card
+                  className={cn(
+                    'h-full transition-shadow',
+                    filled === 4 && 'border-primary/40',
+                    today === day && 'border-primary/60 shadow-md ring-2 ring-primary/30'
+                  )}
+                >
                   <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-semibold">{dayName}</CardTitle>
+                    <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
+                      {dayName}
+                      {today === day && (
+                        <Badge className="gap-0.5 border-transparent bg-amber-400 px-1.5 py-0 text-[10px] font-bold text-amber-950">
+                          <CalendarDays aria-hidden="true" className="size-2.5" />
+                          Hoy
+                        </Badge>
+                      )}
+                    </CardTitle>
                     <Badge
                       variant="outline"
                       className={cn(
@@ -398,10 +437,22 @@ export function PlanView() {
                   <span className="text-xs text-muted-foreground">
                     {checked.size} de {shoppingList.length} marcados
                   </span>
-                  <Button variant="outline" size="sm" className="min-h-9" onClick={() => void copyList()}>
-                    <ClipboardCopy aria-hidden="true" className="size-4" />
-                    Copiar lista
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-9"
+                      onClick={exportCsv}
+                      aria-label="Exportar la lista de la compra en CSV"
+                    >
+                      <Download aria-hidden="true" className="size-4" />
+                      CSV
+                    </Button>
+                    <Button variant="outline" size="sm" className="min-h-9" onClick={() => void copyList()}>
+                      <ClipboardCopy aria-hidden="true" className="size-4" />
+                      Copiar lista
+                    </Button>
+                  </div>
                 </div>
               </>
             )}

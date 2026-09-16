@@ -390,12 +390,16 @@ function ReportsPanel() {
     void load()
   }, [load])
 
-  async function resolve(report: ReportData, resolution: 'DISMISS' | 'REMOVE_CONTENT' | 'SUSPEND_USER') {
+  async function resolve(
+    report: ReportData,
+    resolution: 'DISMISS' | 'REMOVE_CONTENT' | 'SUSPEND_USER',
+    noteText?: string
+  ) {
     setBusy(true)
     try {
       await api(`/api/reports/${report.id}`, jsonBody('PATCH', {
         resolution,
-        note: note.trim() || undefined,
+        note: (noteText ?? note).trim() || undefined,
       }))
       toast.success(
         resolution === 'DISMISS'
@@ -502,9 +506,55 @@ function ReportsPanel() {
                 )}
 
                 {r.status === 'OPEN' && (
-                  <div className="flex justify-end">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    {/* Acciones rápidas en línea: desestimar directo y retirar contenido
+                        con confirmación; «Revisar» abre el diálogo completo con nota y
+                        suspensión de usuario. */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-9 text-muted-foreground hover:text-foreground"
+                      disabled={busy}
+                      onClick={() => void resolve(r, 'DISMISS')}
+                      aria-label={`Desestimar la denuncia de ${r.targetPreview?.title ?? r.targetType.toLowerCase()}`}
+                    >
+                      <RotateCcw aria-hidden="true" className="size-3.5" />
+                      Desestimar
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-9 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={busy}
+                        >
+                          <Trash2 aria-hidden="true" className="size-3.5" />
+                          Eliminar contenido
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Retirar el contenido denunciado?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Se eliminará «{r.targetPreview?.title ?? 'el contenido'}» y la denuncia se
+                            marcará como resuelta. El autor recibirá una notificación. Esta acción no se
+                            puede deshacer.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                            onClick={() => void resolve(r, 'REMOVE_CONTENT')}
+                          >
+                            Sí, retirar contenido
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                     <Button variant="outline" size="sm" className="min-h-9" onClick={() => setActing(r)}>
-                      Revisar y actuar
+                      Revisar y actuar…
                     </Button>
                   </div>
                 )}
