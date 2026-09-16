@@ -91,16 +91,21 @@ model MealPlanItem {
 
 // Plantillas de menú: guardan un plan semanal reutilizable para recuperarlo después.
 // days se guarda como JSON string [{ day: 0-6, slot, recipeId }] (SQLite no soporta listas).
+// isPublic: las plantillas publicadas por profesionales aparecen en la galería
+// «Plantillas de la comunidad» para que cualquier usuario las aplique a su plan.
 model PlanTemplate {
-  id        String   @id @default(cuid())
-  name      String
-  days      String   @default("[]")
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isPublic    Boolean  @default(false)
+  days        String   @default("[]")
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([userId, createdAt])
+  @@index([isPublic, createdAt])
 }
 
 model Rating {

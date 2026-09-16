@@ -709,6 +709,71 @@ async function main() {
     ],
   })
 
+  console.log('🌍 Creando plantillas de menú de la comunidad (profesionales)...')
+  // Limpieza idempotente
+  await db.planTemplate.deleteMany()
+  // Plantilla personal de Lucía (paciente): su semana tipo
+  const luciaUser = byEmail('paciente@simbiosis.org')
+  const luciaWeek = [
+    [0, 'BREAKFAST', r5], [0, 'LUNCH', r2], [0, 'DINNER', r1], [0, 'SNACK', r8],
+    [1, 'BREAKFAST', r5], [1, 'LUNCH', r6], [1, 'DINNER', r3],
+    [2, 'BREAKFAST', r5], [2, 'LUNCH', r4], [2, 'DINNER', r7],
+    [3, 'BREAKFAST', r5], [3, 'LUNCH', r2], [3, 'DINNER', r1],
+    [4, 'BREAKFAST', r5], [4, 'LUNCH', r6], [4, 'DINNER', r7],
+    [5, 'BREAKFAST', r5], [5, 'LUNCH', r4], [5, 'DINNER', r3],
+    [6, 'BREAKFAST', r5], [6, 'LUNCH', r2], [6, 'SNACK', r8], [6, 'DINNER', r1],
+  ] as const
+  await db.planTemplate.create({
+    data: {
+      name: 'Mi semana tipo en remisión',
+      description: 'Mi semana cuando me siento bien: smoothie por la mañana, comidas al vapor y cenas de cuchara.',
+      isPublic: false,
+      days: JSON.stringify(luciaWeek.map(([day, slot, r]) => ({ day, slot, recipeId: r.id }))),
+      userId: luciaUser.id,
+    },
+  })
+  // Galería de la comunidad: publicadas por profesionales
+  const nutriWeek = [
+    [0, 'BREAKFAST', r5], [0, 'LUNCH', r2], [0, 'DINNER', r1],
+    [1, 'BREAKFAST', r5], [1, 'LUNCH', r6], [1, 'DINNER', r3],
+    [2, 'BREAKFAST', r5], [2, 'LUNCH', r4], [2, 'DINNER', r7],
+    [3, 'BREAKFAST', r5], [3, 'LUNCH', r2], [3, 'SNACK', r8], [3, 'DINNER', r1],
+    [4, 'BREAKFAST', r5], [4, 'LUNCH', r6], [4, 'DINNER', r7],
+    [5, 'BREAKFAST', r5], [5, 'LUNCH', r4], [5, 'DINNER', r3],
+    [6, 'BREAKFAST', r5], [6, 'LUNCH', r2], [6, 'SNACK', r8], [6, 'DINNER', r1],
+  ] as const
+  await db.planTemplate.create({
+    data: {
+      name: 'Semana suave en remisión · Equipo de nutrición',
+      description:
+        'Menú semanal para mantener la remisión: cocciones sencillas, poca grasa, cenas ligeras y un dulce apto los fines de semana. Elaborado por el equipo de nutrición de Simbiosis.',
+      isPublic: true,
+      days: JSON.stringify(nutriWeek.map(([day, slot, r]) => ({ day, slot, recipeId: r.id }))),
+      userId: nutri.id,
+      createdAt: daysAgo(3),
+    },
+  })
+  const medicoWeek = [
+    [0, 'BREAKFAST', r5], [0, 'LUNCH', r6], [0, 'DINNER', r7],
+    [1, 'BREAKFAST', r5], [1, 'LUNCH', r1], [1, 'DINNER', r7],
+    [2, 'BREAKFAST', r5], [2, 'LUNCH', r6], [2, 'DINNER', r1],
+    [3, 'BREAKFAST', r5], [3, 'LUNCH', r1], [3, 'DINNER', r7],
+    [4, 'BREAKFAST', r5], [4, 'LUNCH', r6], [4, 'DINNER', r1],
+    [5, 'BREAKFAST', r5], [5, 'LUNCH', r1], [5, 'DINNER', r7],
+    [6, 'BREAKFAST', r5], [6, 'LUNCH', r6], [6, 'DINNER', r7],
+  ] as const
+  await db.planTemplate.create({
+    data: {
+      name: 'Plan transitorio para brote · Dr. Sanz',
+      description:
+        'Plan orientativo para días de brote: caldos, purés y texturas suaves en raciones pequeñas. Es un apoyo temporal; sigue siempre las pautas de tu equipo médico.',
+      isPublic: true,
+      days: JSON.stringify(medicoWeek.map(([day, slot, r]) => ({ day, slot, recipeId: r.id }))),
+      userId: medico.id,
+      createdAt: daysAgo(2),
+    },
+  })
+
   console.log('✅ Seed completado.')
   console.log(`   Usuarios: 10 · Recetas: 8 · Hilos: 4 · Publicaciones: 4`)
   console.log(`   Contraseña demo para todas las cuentas: ${DEMO_PASSWORD}`)

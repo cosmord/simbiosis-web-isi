@@ -15,9 +15,11 @@ import {
   Ban,
   BookOpenCheck,
   Check,
+  CheckCircle2,
   ChefHat,
   CircleAlert,
   Flag,
+  LayoutTemplate,
   Loader2,
   Mail,
   MessagesSquare,
@@ -25,6 +27,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
+  UtensilsCrossed,
   UserRound,
   Users,
 } from 'lucide-react'
@@ -186,7 +189,7 @@ function OverviewPanel() {
     return (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 9 }).map((_, i) => (
             <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
@@ -211,20 +214,23 @@ function OverviewPanel() {
     { label: 'Publicaciones', value: stats.totals.publications, icon: BookOpenCheck, className: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
     { label: 'Denuncias abiertas', value: stats.totals.openReports, icon: Flag, className: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' },
     { label: 'Denuncias resueltas', value: stats.totals.resolvedReports, icon: ShieldCheck, className: 'bg-lime-100 text-lime-700 dark:bg-lime-950 dark:text-lime-300' },
+    { label: 'Comidas planificadas', value: stats.totals.plannedMeals, icon: UtensilsCrossed, className: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300' },
+    { label: 'Comidas cocinadas', value: stats.totals.cookedMeals, icon: CheckCircle2, className: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' },
+    { label: 'Plantillas de la comunidad', value: stats.totals.publicTemplates, icon: LayoutTemplate, className: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' },
   ]
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {totals.map(({ label, value, icon: Icon, className }) => (
-          <Card key={label}>
-            <CardContent className="flex items-center gap-3 p-4">
+          <Card key={label} className="transition-shadow hover:shadow-sm">
+            <CardContent className="flex h-full items-center gap-3 p-4">
               <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', className)}>
                 <Icon aria-hidden="true" className="size-5" />
               </span>
               <div className="min-w-0">
                 <p className="text-xl font-bold leading-none tracking-tight">{value}</p>
-                <p className="mt-1 truncate text-xs text-muted-foreground">{label}</p>
+                <p className="mt-1 text-xs leading-tight text-muted-foreground">{label}</p>
               </div>
             </CardContent>
           </Card>

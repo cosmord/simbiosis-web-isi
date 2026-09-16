@@ -33,6 +33,8 @@ export async function GET() {
       return {
         id: t.id,
         name: t.name,
+        description: t.description,
+        isPublic: t.isPublic,
         recipeCount: days.length,
         createdAt: t.createdAt.toISOString(),
       }

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { ok, fail, requireUser } from '@/lib/api-helpers'
 import { parseJsonArray } from '@/lib/serialize'
+import { computeHealthInsight } from '@/lib/health-insights'
 
 const SLOTS = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'] as const
 
@@ -32,10 +33,15 @@ const PHASE_SUITABLE: Record<string, string[]> = {
   BROTE_ACTIVO: ['Brote activo', 'Brote leve'],
 }
 
+/** Puntos que suma cada etiqueta coincidente con el consejo de salud (máx. 2 etiquetas cuentan). */
+const INSIGHT_TAG_SCORE = 14
+
 /**
  * GET /api/plan/suggestions?slot=LUNCH
  * Sugiere recetas para un hueco del plan combinando:
  *  - la fase actual del usuario (último registro de síntomas del diario), vía suitableFor,
+ *  - el consejo de salud personalizado (motor compartido con /api/health/insights):
+ *    las recetas cuyas etiquetas encajan con las pautas sugeridas reciben un refuerzo,
  *  - la categoría que encaja con la franja (desayuno/comida/cena/snack),
  *  - valoración media, favoritos y recetas de profesionales como refuerzo.
  * Excluye las recetas que ya están en el plan del usuario.
@@ -58,7 +64,12 @@ export async function GET(req: Request) {
   })
   const phase = lastEntry ? phaseFromSymptoms(lastEntry.symptoms) : null
 
-  // 2) Recetas publicadas con autor, valoración media y nº de favoritos.
+  // 2) Consejo de salud (motor compartido con el diario): etiquetas pautadas
+  //    según la evolución reciente (media, días intensos, tendencia, peso).
+  const { hasData, insight } = await computeHealthInsight(auth.user.id)
+  const insightTags = insight?.suggestedTags ?? []
+
+  // 3) Recetas publicadas con autor, valoración media y nº de favoritos.
   const recipes = await db.recipe.findMany({
     where: { status: 'PUBLISHED' },
     include: {
@@ -68,7 +79,7 @@ export async function GET(req: Request) {
     },
   })
 
-  // 3) Recetas que el usuario ya tiene en el plan (cualquier hueco) para no repetir.
+  // 4) Recetas que el usuario ya tiene en el plan (cualquier hueco) para no repetir.
   const planItems = await db.mealPlanItem.findMany({
     where: { userId: auth.user.id },
     select: { recipeId: true },
@@ -81,6 +92,7 @@ export async function GET(req: Request) {
   const scored = recipes
     .map((r) => {
       const suitable = parseJsonArray(r.suitableFor)
+      const tags = parseJsonArray(r.tags)
       const avg =
         r.ratings.length > 0
           ? r.ratings.reduce((s, x) => s + x.stars, 0) / r.ratings.length
@@ -90,10 +102,14 @@ export async function GET(req: Request) {
 
       const matchesPhase = suitableMatch.some((s) => suitable.includes(s))
       const matchesCategory = preferred.includes(r.category)
+      // Etiquetas del consejo que la receta cumple (máx. 2 para no dominar la puntuación).
+      const matchedTags = insightTags.filter((t) => tags.includes(t)).slice(0, 2)
+      const matchesInsight = matchedTags.length > 0
 
       let score = 0
       if (matchesPhase) score += 50
       if (matchesCategory) score += 20
+      score += matchedTags.length * INSIGHT_TAG_SCORE
       score += avg * 5 // hasta 25
       score += favorites * 2
       if (isPro) score += 5
@@ -107,7 +123,7 @@ export async function GET(req: Request) {
         image: r.image,
         category: r.category,
         suitableFor: suitable,
-        tags: parseJsonArray(r.tags),
+        tags,
         ingredients: parseJsonArray(r.ingredients),
         prepTime: r.prepTime,
         servings: r.servings,
@@ -116,6 +132,8 @@ export async function GET(req: Request) {
         ratingCount: r.ratings.length,
         favoritesCount: favorites,
         matchesPhase,
+        matchesInsight,
+        matchedTags,
         matchesCategory,
         inPlan: plannedIds.has(r.id),
         score: Math.round(score * 10) / 10,
@@ -131,6 +149,8 @@ export async function GET(req: Request) {
     phase,
     phaseLabel: phase ? PHASE_LABELS[phase] : null,
     hasHealthData: !!lastEntry,
+    insightTags,
+    insightLevel: insight?.level ?? null,
     slot,
     categories: preferred,
     suggestions: chosen,

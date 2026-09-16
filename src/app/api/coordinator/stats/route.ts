@@ -11,7 +11,7 @@ export async function GET() {
 
   const SINCE = new Date(Date.now() - 14 * 24 * 3600 * 1000)
 
-  const [users, recipes, threads, publications, openReports, resolvedReports, recentUsers, recentRecipes, recentThreads] =
+  const [users, recipes, threads, publications, openReports, resolvedReports, recentUsers, recentRecipes, recentThreads, plannedMeals, cookedMeals, publicTemplates] =
     await Promise.all([
       db.user.findMany({ select: { role: true, status: true } }),
       db.recipe.count({ where: { status: 'PUBLISHED' } }),
@@ -22,6 +22,9 @@ export async function GET() {
       db.user.findMany({ select: { createdAt: true }, where: { createdAt: { gte: SINCE } } }),
       db.recipe.findMany({ select: { createdAt: true }, where: { createdAt: { gte: SINCE } } }),
       db.thread.findMany({ select: { createdAt: true }, where: { createdAt: { gte: SINCE } } }),
+      db.mealPlanItem.count(),
+      db.mealPlanItem.count({ where: { done: true } }),
+      db.planTemplate.count({ where: { isPublic: true } }),
     ])
 
   const byRole: Record<string, number> = {}
@@ -73,6 +76,9 @@ export async function GET() {
       publications,
       openReports,
       resolvedReports,
+      plannedMeals,
+      cookedMeals,
+      publicTemplates,
     },
     usersByRole: byRole,
     usersByStatus: byStatus,

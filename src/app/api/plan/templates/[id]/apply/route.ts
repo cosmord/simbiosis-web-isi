@@ -37,6 +37,7 @@ function recipeSummary(recipe: {
 /**
  * POST /api/plan/templates/[id]/apply — aplica la plantilla al plan semanal,
  * sustituyendo el contenido actual. Las recetas retiradas de la plataforma se omiten.
+ * Permite aplicar plantillas propias o publicadas en la comunidad por profesionales.
  */
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireUser()
@@ -44,8 +45,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const { id } = await ctx.params
   const template = await db.planTemplate.findUnique({ where: { id } })
-  if (!template || template.userId !== auth.user.id)
-    return fail('La plantilla solicitada no existe.', 404)
+  if (!template || (template.userId !== auth.user.id && !template.isPublic))
+    return fail('La plantilla solicitada no existe o no está disponible.', 404)
 
   let days: TemplateDay[] = []
   try {

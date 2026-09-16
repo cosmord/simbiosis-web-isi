@@ -1,0 +1,570 @@
+   600→                              'size-3.5 shrink-0 transition-colors',
+   601→                              isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+   602→                            )}
+   603→                          />
+   604→                          <span className="w-16 shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+   605→                            {slotLabel}
+   606→                          </span>
+   607→                          {item ? (
+   608→                            <div className="flex min-w-0 flex-1 items-center gap-1">
+   609→                              <button
+   610→                                type="button"
+   611→                                className="shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring print:hidden"
+   612→                                onClick={() => void toggleDone(item)}
+   613→                                aria-pressed={isDone}
+   614→                                aria-label={
+   615→                                  isDone
+   616→                                    ? `Desmarcar ${item.recipe.title} como cocinada`
+   617→                                    : `Marcar ${item.recipe.title} como cocinada`
+   618→                                }
+   619→                                title={isDone ? 'Cocinada — clic para desmarcar' : 'Marcar como cocinada'}
+   620→                              >
+   621→                                <CheckCircle2
+   622→                                  aria-hidden="true"
+   623→                                  className={cn(
+   624→                                    'size-4.5 transition-all duration-200',
+   625→                                    isDone
+   626→                                      ? 'fill-emerald-500 text-emerald-500 drop-shadow-sm'
+   627→                                      : 'text-muted-foreground/50 hover:scale-110 hover:text-emerald-500'
+   628→                                  )}
+   629→                                />
+   630→                              </button>
+   631→                              <button
+   632→                                type="button"
+   633→                                className={cn(
+   634→                                  'min-w-0 flex-1 truncate rounded text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring print:text-inherit',
+   635→                                  isDone
+   636→                                    ? 'text-muted-foreground line-through decoration-emerald-500/60'
+   637→                                    : 'hover:text-primary hover:underline'
+   638→                                )}
+   639→                                onClick={() => navigate('recipeDetail', { id: item.recipe.id })}
+   640→                                aria-label={`Ver receta ${item.recipe.title}`}
+   641→                              >
+   642→                                {item.recipe.title}
+   643→                              </button>
+   644→                              <Button
+   645→                                variant="ghost"
+   646→                                size="icon"
+   647→                                className="size-6 shrink-0 rounded-full text-muted-foreground hover:text-destructive print:hidden"
+   648→                                onClick={() => void removeItem(item.id)}
+   649→                                aria-label={`Quitar ${item.recipe.title} del ${slotLabel.toLowerCase()} del ${dayName.toLowerCase()}`}
+   650→                              >
+   651→                                <X aria-hidden="true" className="size-3.5" />
+   652→                              </Button>
+   653→                            </div>
+   654→                          ) : (
+   655→                            <button
+   656→                              type="button"
+   657→                              className="flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring print:hidden"
+   658→                              onClick={() => setPicker({ day, slot: slotDef.value })}
+   659→                              aria-label={`Añadir receta al ${slotLabel.toLowerCase()} del ${dayName.toLowerCase()}`}
+   660→                            >
+   661→                              <Plus aria-hidden="true" className="size-3.5" />
+   662→                              Añadir
+   663→                            </button>
+   664→                          )}
+   665→                        </div>
+   666→                      )
+   667→                    })}
+   668→                  </CardContent>
+   669→                </Card>
+   670→              </motion.div>
+   671→            )
+   672→          })}
+   673→        </div>
+   674→
+   675→        {/* Lista de la compra */}
+   676→        <Card className="xl:sticky xl:top-20 h-fit">
+   677→          <CardHeader className="pb-3">
+   678→            <CardTitle className="flex items-center gap-2 text-base">
+   679→              <ShoppingBasket aria-hidden="true" className="size-4.5 text-primary" />
+   680→              Lista de la compra
+   681→              {plannedCount > 0 && (
+   682→                <Badge variant="secondary" className="ml-auto">
+   683→                  {plannedCount} {plannedCount === 1 ? 'receta' : 'recetas'}
+   684→                </Badge>
+   685→              )}
+   686→            </CardTitle>
+   687→          </CardHeader>
+   688→          <CardContent className="space-y-3">
+   689→            {shoppingList.length === 0 ? (
+   690→              <p className="text-sm text-muted-foreground">
+   691→                Añade recetas a tu plan y aquí aparecerán todos los ingredientes que necesitas,
+   692→                agrupados automáticamente.
+   693→              </p>
+   694→            ) : (
+   695→              <>
+   696→                <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
+   697→                  {shoppingList.map((entry) => {
+   698→                    const isChecked = checked.has(entry.key)
+   699→                    return (
+   700→                      <li key={entry.key}>
+   701→                        <button
+   702→                          type="button"
+   703→                          onClick={() =>
+   704→                            setChecked((prev) => {
+   705→                              const next = new Set(prev)
+   706→                              if (next.has(entry.key)) next.delete(entry.key)
+   707→                              else next.add(entry.key)
+   708→                              return next
+   709→                            })
+   710→                          }
+   711→                          className={cn(
+   712→                            'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+   713→                            isChecked && 'text-muted-foreground'
+   714→                          )}
+   715→                          aria-pressed={isChecked}
+   716→                        >
+   717→                          <span
+   718→                            aria-hidden="true"
+   719→                            className={cn(
+   720→                              'flex size-4.5 shrink-0 items-center justify-center rounded-full border transition-colors',
+   721→                              isChecked
+   722→                                ? 'border-primary bg-primary text-primary-foreground'
+   723→                                : 'border-input'
+   724→                            )}
+   725→                          >
+   726→                            {isChecked && <Check className="size-3" />}
+   727→                          </span>
+   728→                          <span className={cn('min-w-0 flex-1', isChecked && 'line-through')}>
+   729→                            {entry.label}
+   730→                          </span>
+   731→                          {entry.count > 1 && (
+   732→                            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground">
+   733→                              ×{entry.count}
+   734→                            </Badge>
+   735→                          )}
+   736→                        </button>
+   737→                      </li>
+   738→                    )
+   739→                  })}
+   740→                </ul>
+   741→                <Separator />
+   742→                <div className="flex items-center justify-between gap-2 print:hidden">
+   743→                  <span className="text-xs text-muted-foreground">
+   744→                    {checked.size} de {shoppingList.length} marcados
+   745→                  </span>
+   746→                  <div className="flex items-center gap-1.5">
+   747→                    <Button
+   748→                      variant="outline"
+   749→                      size="sm"
+   750→                      className="min-h-9"
+   751→                      onClick={exportCsv}
+   752→                      aria-label="Exportar la lista de la compra en CSV"
+   753→                    >
+   754→                      <Download aria-hidden="true" className="size-4" />
+   755→                      CSV
+   756→                    </Button>
+   757→                    <Button variant="outline" size="sm" className="min-h-9" onClick={() => void copyList()}>
+   758→                      <ClipboardCopy aria-hidden="true" className="size-4" />
+   759→                      Copiar lista
+   760→                    </Button>
+   761→                  </div>
+   762→                </div>
+   763→              </>
+   764→            )}
+   765→          </CardContent>
+   766→        </Card>
+   767→      </div>
+   768→
+   769→      {/* Selector de receta */}
+   770→      <RecipePickerDialog
+   771→        picker={picker}
+   772→        onClose={() => setPicker(null)}
+   773→        onPick={(recipe) => void assign(recipe)}
+   774→      />
+   775→
+   776→      {/* Guardar plan como plantilla */}
+   777→      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+   778→        <DialogContent className="sm:max-w-md">
+   779→          <DialogHeader>
+   780→            <DialogTitle className="flex items-center gap-2">
+   781→              <BookmarkCheck aria-hidden="true" className="size-5 text-primary" />
+   782→              Guardar como plantilla
+   783→            </DialogTitle>
+   784→            <DialogDescription>
+   785→              Se guardará tu plan semanal actual ({plannedCount}{' '}
+   786→              {plannedCount === 1 ? 'receta' : 'recetas'}) con el nombre que elijas. Podrás
+   787→              recuperarlo en cualquier momento desde «Mis plantillas».
+   788→            </DialogDescription>
+   789→          </DialogHeader>
+   790→          <div className="space-y-1.5">
+   791→            <Label htmlFor="template-name">Nombre de la plantilla</Label>
+   792→            <Input
+   793→              id="template-name"
+   794→              value={templateName}
+   795→              onChange={(e) => setTemplateName(e.target.value)}
+   796→              placeholder="Ej.: Semana suave en brote"
+   797→              maxLength={60}
+   798→              autoFocus
+   799→              onKeyDown={(e) => {
+   800→                if (e.key === 'Enter' && !savingTemplate) void saveTemplate()
+   801→              }}
+   802→            />
+   803→            <p className="text-xs text-muted-foreground">
+   804→              Si ya existe una plantilla con ese nombre, se actualizará con tu plan actual.
+   805→            </p>
+   806→          </div>
+   807→          <DialogFooter>
+   808→            <Button variant="outline" onClick={() => setSaveOpen(false)} disabled={savingTemplate}>
+   809→              Cancelar
+   810→            </Button>
+   811→            <Button onClick={() => void saveTemplate()} disabled={savingTemplate}>
+   812→              {savingTemplate ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Bookmark aria-hidden="true" className="size-4" />}
+   813→              Guardar plantilla
+   814→            </Button>
+   815→          </DialogFooter>
+   816→        </DialogContent>
+   817→      </Dialog>
+   818→
+   819→      {/* Listado y aplicación de plantillas */}
+   820→      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+   821→        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+   822→          <DialogHeader>
+   823→            <DialogTitle className="flex items-center gap-2">
+   824→              <LayoutTemplate aria-hidden="true" className="size-5 text-primary" />
+   825→              Mis plantillas de menú
+   826→            </DialogTitle>
+   827→            <DialogDescription>
+   828→              Aplica una plantilla para rellenar tu semana al instante. Sustituirá el plan
+   829→              actual si lo tienes.
+   830→            </DialogDescription>
+   831→          </DialogHeader>
+   832→          <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+   833→            {loadingTemplates ? (
+   834→              <div className="space-y-2 py-2">
+   835→                {Array.from({ length: 3 }).map((_, i) => (
+   836→                  <Skeleton key={i} className="h-16 w-full rounded-xl" />
+   837→                ))}
+   838→              </div>
+   839→            ) : (templates ?? []).length === 0 ? (
+   840→              <div className="flex flex-col items-center gap-2 py-8 text-center">
+   841→                <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+   842→                  <LayoutTemplate aria-hidden="true" className="size-6" />
+   843→                </span>
+   844→                <p className="text-sm font-medium">Aún no tienes plantillas</p>
+   845→                <p className="max-w-xs text-xs text-muted-foreground">
+   846→                  Organiza una semana que te siente bien y guárdala con «Guardar como plantilla»
+   847→                  para reutilizarla cuando quieras.
+   848→                </p>
+   849→              </div>
+   850→            ) : (
+   851→              (templates ?? []).map((t) => (
+   852→                <div
+   853→                  key={t.id}
+   854→                  className="flex items-center gap-3 rounded-xl border p-3 transition-colors hover:border-primary/40"
+   855→                >
+   856→                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+   857→                    <UtensilsCrossed aria-hidden="true" className="size-4.5" />
+   858→                  </span>
+   859→                  <div className="min-w-0 flex-1">
+   860→                    <p className="truncate text-sm font-semibold">{t.name}</p>
+   861→                    <p className="text-xs text-muted-foreground">
+   862→                      {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'} · guardada el{' '}
+   863→                      {new Date(t.createdAt).toLocaleDateString('es-ES', {
+   864→                        day: 'numeric',
+   865→                        month: 'short',
+   866→                      })}
+   867→                    </p>
+   868→                  </div>
+   869→                  <Button
+   870→                    size="sm"
+   871→                    className="min-h-9"
+   872→                    disabled={applyingId === t.id}
+   873→                    onClick={() =>
+   874→                      plannedCount > 0 ? setConfirmApply(t) : void applyTemplate(t)
+   875→                    }
+   876→                  >
+   877→                    {applyingId === t.id ? (
+   878→                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+   879→                    ) : null}
+   880→                    Aplicar
+   881→                  </Button>
+   882→                  <AlertDialog>
+   883→                    <AlertDialogTrigger asChild>
+   884→                      <Button
+   885→                        variant="ghost"
+   886→                        size="icon"
+   887→                        className="size-9 shrink-0 text-muted-foreground hover:text-destructive"
+   888→                        aria-label={`Eliminar la plantilla ${t.name}`}
+   889→                      >
+   890→                        <Trash2 aria-hidden="true" className="size-4" />
+   891→                      </Button>
+   892→                    </AlertDialogTrigger>
+   893→                    <AlertDialogContent>
+   894→                      <AlertDialogHeader>
+   895→                        <AlertDialogTitle>¿Eliminar la plantilla «{t.name}»?</AlertDialogTitle>
+   896→                        <AlertDialogDescription>
+   897→                          Tu plan semanal actual no se verá afectado. Esta acción no se puede deshacer.
+   898→                        </AlertDialogDescription>
+   899→                      </AlertDialogHeader>
+   900→                      <AlertDialogFooter>
+   901→                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+   902→                        <AlertDialogAction
+   903→                          className="bg-destructive text-white hover:bg-destructive/90"
+   904→                          onClick={() => void deleteTemplate(t)}
+   905→                        >
+   906→                          Sí, eliminar
+   907→                        </AlertDialogAction>
+   908→                      </AlertDialogFooter>
+   909→                    </AlertDialogContent>
+   910→                  </AlertDialog>
+   911→                </div>
+   912→              ))
+   913→            )}
+   914→          </div>
+   915→        </DialogContent>
+   916→      </Dialog>
+   917→
+   918→      {/* Confirmación al aplicar con un plan en curso */}
+   919→      <AlertDialog open={!!confirmApply} onOpenChange={(o) => !o && setConfirmApply(null)}>
+   920→        <AlertDialogContent>
+   921→          <AlertDialogHeader>
+   922→            <AlertDialogTitle>¿Aplicar la plantilla «{confirmApply?.name}»?</AlertDialogTitle>
+   923→            <AlertDialogDescription>
+   924→              Tu plan semanal actual ({plannedCount}{' '}
+   925→              {plannedCount === 1 ? 'receta' : 'recetas'}) se sustituirá por el contenido de la
+   926→              plantilla ({confirmApply?.recipeCount ?? 0}). Podrás rehacerlo, pero esta acción no
+   927→              guarda el plan actual.
+   928→            </AlertDialogDescription>
+   929→          </AlertDialogHeader>
+   930→          <AlertDialogFooter>
+   931→            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+   932→            <AlertDialogAction onClick={() => confirmApply && void applyTemplate(confirmApply)}>
+   933→              Sí, aplicar plantilla
+   934→            </AlertDialogAction>
+   935→          </AlertDialogFooter>
+   936→        </AlertDialogContent>
+   937→      </AlertDialog>
+   938→    </div>
+   939→  )
+   940→}
+   941→
+   942→/** Diálogo para buscar y elegir la receta que ocupará un hueco del plan. */
+   943→function RecipePickerDialog({
+   944→  picker,
+   945→  onClose,
+   946→  onPick,
+   947→}: {
+   948→  picker: { day: number; slot: PlanSlot } | null
+   949→  onClose: () => void
+   950→  onPick: (recipe: PlanRecipeSummary | RecipeCardData) => void
+   951→}) {
+   952→  const [query, setQuery] = useState('')
+   953→  const [results, setResults] = useState<PlanRecipeSummary[] | null>(null)
+   954→  const [loading, setLoading] = useState(false)
+   955→  // Sugerencias inteligentes según la fase del diario y la franja elegida.
+   956→  const [sug, setSug] = useState<PlanSuggestionsData | null>(null)
+   957→  const [sugLoading, setSugLoading] = useState(false)
+   958→
+   959→  const slot = picker?.slot ?? null
+   960→
+   961→  // Carga de sugerencias al abrir el diálogo (una por franja abierta).
+   962→  useEffect(() => {
+   963→    if (!slot) return
+   964→    let active = true
+   965→    const t = setTimeout(() => {
+   966→      setSug(null)
+   967→      setSugLoading(true)
+   968→      api<PlanSuggestionsData>(`/api/plan/suggestions?slot=${slot}`)
+   969→        .then((d) => active && setSug(d))
+   970→        .catch(() => active && setSug(null))
+   971→        .finally(() => active && setSugLoading(false))
+   972→    }, 0)
+   973→    return () => {
+   974→      active = false
+   975→      clearTimeout(t)
+   976→    }
+   977→  }, [slot])
+   978→
+   979→  useEffect(() => {
+   980→    if (!picker) return
+   981→    let active = true
+   982→    const t = setTimeout(() => {
+   983→      setLoading(true)
+   984→      api<{ recipes: (RecipeCardData & { ingredients?: string[] })[] }>(
+   985→        `/api/recipes?q=${encodeURIComponent(query)}`
+   986→      )
+   987→        .then((d) => {
+   988→          if (!active) return
+   989→          setResults(
+   990→            d.recipes.map((r) => ({
+   991→              id: r.id,
+   992→              title: r.title,
+   993→              image: r.image,
+   994→              category: r.category,
+   995→              ingredients: r.ingredients ?? [],
+   996→              prepTime: r.prepTime,
+   997→              servings: r.servings,
+   998→              author: r.author ?? { id: '', name: 'Comunidad', role: 'PATIENT' },
+   999→            }))
+  1000→          )
+  1001→        })
+  1002→        .catch(() => active && setResults([]))
+  1003→        .finally(() => active && setLoading(false))
+  1004→    }, 250)
+  1005→    return () => {
+  1006→      active = false
+  1007→      clearTimeout(t)
+  1008→    }
+  1009→  }, [picker, query])
+  1010→
+  1011→  function handleClose() {
+  1012→    setQuery('')
+  1013→    setResults(null)
+  1014→    setSug(null)
+  1015→    onClose()
+  1016→  }
+  1017→
+  1018→  const slotLabel = picker ? PLAN_SLOTS.find((s) => s.value === picker.slot)?.label : ''
+  1019→  const dayLabel = picker ? PLAN_DAY_NAMES[picker.day] : ''
+  1020→
+  1021→  const phaseBadgeCls =
+  1022→    sug?.phase === 'BROTE_ACTIVO'
+  1023→      ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400'
+  1024→      : sug?.phase === 'BROTE_LEVE'
+  1025→        ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+  1026→        : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+  1027→
+  1028→  const topSuggestions = (sug?.suggestions ?? []).slice(0, 4)
+  1029→
+  1030→  return (
+  1031→    <Dialog open={!!picker} onOpenChange={(open) => !open && handleClose()}>
+  1032→      <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+  1033→        <DialogHeader>
+  1034→          <DialogTitle>Añadir receta · {dayLabel} · {slotLabel}</DialogTitle>
+  1035→          <DialogDescription>
+  1036→            Busca una receta de la comunidad para este hueco del plan. Sustituirá la actual si la hay.
+  1037→          </DialogDescription>
+  1038→        </DialogHeader>
+  1039→        <Input
+  1040→          placeholder="Buscar recetas por título o descripción…"
+  1041→          value={query}
+  1042→          onChange={(e) => setQuery(e.target.value)}
+  1043→          aria-label="Buscar recetas para el plan"
+  1044→        />
+  1045→        <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+  1046→          {/* Sugerencias inteligentes (solo con la búsqueda vacía) */}
+  1047→          {query.trim() === '' && (
+  1048→            <section aria-label="Sugerencias para este hueco del plan" className="pb-1">
+  1049→              {sugLoading ? (
+  1050→                <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2.5 text-sm text-muted-foreground">
+  1051→                  <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+  1052→                  Buscando sugerencias para tu fase…
+  1053→                </div>
+  1054→              ) : topSuggestions.length > 0 ? (
+  1055→                <div className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/[0.06] to-transparent p-2.5">
+  1056→                  <div className="flex flex-wrap items-center gap-1.5 px-0.5 pb-2">
+  1057→                    <Sparkles aria-hidden="true" className="size-3.5 text-primary" />
+  1058→                    <p className="text-xs font-semibold">Sugerencias para {slotLabel?.toLowerCase()}</p>
+  1059→                    {sug?.phaseLabel ? (
+  1060→                      <Badge
+  1061→                        variant="outline"
+  1062→                        className={cn('px-1.5 py-0 text-[10px] font-semibold', phaseBadgeCls)}
+  1063→                        title="Fase inferida del último registro de tu diario de salud"
+  1064→                      >
+  1065→                        {sug.phaseLabel}
+  1066→                      </Badge>
+  1067→                    ) : (
+  1068→                      <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+  1069→                        Sin datos del diario
+  1070→                      </Badge>
+  1071→                    )}
+  1072→                  </div>
+  1073→                  <div className="space-y-1">
+  1074→                    {topSuggestions.map((s) => (
+  1075→                      <button
+  1076→                        key={s.id}
+  1077→                        type="button"
+  1078→                        className="flex w-full items-center gap-3 rounded-lg border bg-background/80 p-2 text-left outline-none transition-all hover:border-primary/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+  1079→                        onClick={() => onPick(s)}
+  1080→                        aria-label={`Añadir ${s.title} al plan (sugerencia)`}
+  1081→                      >
+  1082→                        <span className="relative size-11 shrink-0 overflow-hidden rounded-lg">
+  1083→                          <ImageWithFallback src={s.image} alt="" sizes="44px" icon="none" />
+  1084→                        </span>
+  1085→                        <span className="min-w-0 flex-1">
+  1086→                          <span className="block truncate text-sm font-medium">{s.title}</span>
+  1087→                          <span className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+  1088→                            {s.matchesPhase && (
+  1089→                              <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+  1090→                                <Check aria-hidden="true" className="size-3" />
+  1091→                                Apta para tu fase
+  1092→                              </span>
+  1093→                            )}
+  1094→                            {s.matchesCategory && (
+  1095→                              <span>· {s.category}</span>
+  1096→                            )}
+  1097→                            <span>· {s.prepTime} min</span>
+  1098→                            {s.ratingCount > 0 && (
+  1099→                              <span>· ★ {s.avgRating.toLocaleString('es-ES')} ({s.ratingCount})</span>
+  1100→                            )}
+  1101→                          </span>
+  1102→                        </span>
+  1103→                        <Plus aria-hidden="true" className="size-4 shrink-0 text-primary" />
+  1104→                      </button>
+  1105→                    ))}
+  1106→                  </div>
+  1107→                  {sug && !sug.hasHealthData && (
+  1108→                    <p className="px-0.5 pt-1.5 text-[11px] text-muted-foreground">
+  1109→                      Registra síntomas en tu diario y ajustaremos estas sugerencias a tu fase.
+  1110→                    </p>
+  1111→                  )}
+  1112→                </div>
+  1113→              ) : sug && !sugLoading ? (
+  1114→                <p className="flex items-center gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+  1115→                  <Sparkles aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+  1116→                  {sug.hasHealthData
+  1117→                    ? 'Ya tienes planificadas las recetas que mejor encajan con tu fase. Prueba la búsqueda.'
+  1118→                    : 'Sin sugerencias por ahora: registra tu fase en el diario de salud para recibirlas.'}
+  1119→                </p>
+  1120→              ) : null}
+  1121→            </section>
+  1122→          )}
+  1123→
+  1124→          {/* Separador entre sugerencias y búsqueda */}
+  1125→          {query.trim() === '' && topSuggestions.length > 0 && (
+  1126→            <p className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+  1127→              Todas las recetas
+  1128→            </p>
+  1129→          )}
+  1130→
+  1131→          {results === null ? (
+  1132→            <div className="flex items-center justify-center py-8">
+  1133→              <Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />
+  1134→            </div>
+  1135→          ) : (results ?? []).length === 0 ? (
+  1136→            <p className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+  1137→              <UtensilsCrossed aria-hidden="true" className="size-6" />
+  1138→              No hay recetas que coincidan con la búsqueda.
+  1139→            </p>
+  1140→          ) : (
+  1141→            (results ?? []).map((recipe) => (
+  1142→              <button
+  1143→                key={recipe.id}
+  1144→                type="button"
+  1145→                className="flex w-full items-center gap-3 rounded-xl border p-2 text-left outline-none transition-colors hover:border-primary/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+  1146→                onClick={() => onPick(recipe)}
+  1147→                aria-label={`Añadir ${recipe.title} al plan`}
+  1148→              >
+  1149→                <span className="relative size-12 shrink-0 overflow-hidden rounded-lg">
+  1150→                  <ImageWithFallback src={recipe.image} alt="" sizes="48px" icon="none" />
+  1151→                </span>
+  1152→                <span className="min-w-0 flex-1">
+  1153→                  <span className="block truncate text-sm font-medium">{recipe.title}</span>
+  1154→                  <span className="block text-xs text-muted-foreground">
+  1155→                    {recipe.category} · {recipe.prepTime} min · {recipe.servings}{' '}
+  1156→                    {recipe.servings === 1 ? 'ración' : 'raciones'}
+  1157→                  </span>
+  1158→                </span>
+  1159→                <Plus aria-hidden="true" className="size-4 shrink-0 text-primary" />
+  1160→              </button>
+  1161→            ))
+  1162→          )}
+  1163→        </div>
+  1164→      </DialogContent>
+  1165→    </Dialog>
+  1166→  )
+  1167→}
+
+[showing lines 600-1167 of 1168; use offset=1168 with limit to continue reading]

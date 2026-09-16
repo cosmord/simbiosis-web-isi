@@ -385,6 +385,8 @@ export interface PlanSuggestion {
   ratingCount: number
   favoritesCount: number
   matchesPhase: boolean
+  matchesInsight: boolean
+  matchedTags: string[]
   matchesCategory: boolean
   inPlan: boolean
   score: number
@@ -394,6 +396,8 @@ export interface PlanSuggestionsData {
   phase: 'REMISION' | 'BROTE_LEVE' | 'BROTE_ACTIVO' | null
   phaseLabel: string | null
   hasHealthData: boolean
+  insightTags: string[]
+  insightLevel: 'positive' | 'watch' | 'alert' | null
   slot: PlanSlot
   categories: string[]
   suggestions: PlanSuggestion[]
@@ -402,11 +406,22 @@ export interface PlanSuggestionsData {
 
 /* ---------------------- Plantillas de menú ------------------------------ */
 
+export interface PlanTemplateAuthor {
+  id: string
+  name: string
+  role: string
+}
+
 export interface PlanTemplateData {
   id: string
   name: string
   recipeCount: number
   createdAt: string
+  isPublic?: boolean
+  description?: string | null
+  dayCount?: number
+  /** Autor solo en las plantillas de la comunidad. */
+  author?: PlanTemplateAuthor
 }
 
 /* ------------------- Consejo de salud personalizado --------------------- */
@@ -479,6 +494,9 @@ export interface CoordinatorStatsData {
     publications: number
     openReports: number
     resolvedReports: number
+    plannedMeals: number
+    cookedMeals: number
+    publicTemplates: number
   }
   usersByRole: Record<string, number>
   usersByStatus: Record<string, number>

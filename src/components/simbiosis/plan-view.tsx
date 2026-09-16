@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  BadgeCheck,
   Bookmark,
   BookmarkCheck,
   CalendarDays,
@@ -13,6 +14,7 @@ import {
   Cookie,
   Copy,
   Download,
+  Globe,
   LayoutTemplate,
   Loader2,
   Moon,
@@ -56,11 +58,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ImageWithFallback } from './image-with-fallback'
 import { EmptyState } from './empty-state'
+import { UserAvatar } from './user-bits'
 import { api, jsonBody } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
 import {
   PLAN_DAY_NAMES,
   PLAN_SLOTS,
+  ROLE_LABELS,
   type PlanItemData,
   type PlanRecipeSummary,
   type PlanSlot,
@@ -68,8 +72,11 @@ import {
   type PlanSuggestion,
   type PlanTemplateData,
   type RecipeCardData,
+  type Role,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 
 const SLOT_ICONS = {
   sunrise: Sunrise,
@@ -120,6 +127,18 @@ export function PlanView() {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [applyingId, setApplyingId] = useState<string | null>(null)
   const [confirmApply, setConfirmApply] = useState<PlanTemplateData | null>(null)
+  // Galería de plantillas de la comunidad (profesionales)
+  const [templatesTab, setTemplatesTab] = useState<'mine' | 'community'>('mine')
+  const [community, setCommunity] = useState<PlanTemplateData[] | null>(null)
+  const [loadingCommunity, setLoadingCommunity] = useState(false)
+  // Publicar / retirar una plantilla propia en la galería (profesionales)
+  const [publishDialog, setPublishDialog] = useState<PlanTemplateData | null>(null)
+  const [publishDescription, setPublishDescription] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  // ¿Hay ya una entrada del diario con fecha de hoy? Para sugerir registrarla
+  // justo cuando se marca una comida como «cocinada».
+  const [hasDiaryToday, setHasDiaryToday] = useState<boolean | null>(null)
+  const diaryNudgeShown = useRef(false)
   // Día actual (0 = lunes … 6 = domingo). Se resuelve tras montar para evitar
   // discrepancias de hidratación entre servidor y cliente.
   const [today, setToday] = useState<number | null>(null)
@@ -145,6 +164,18 @@ export function PlanView() {
     if (user) void load()
     else setLoading(false)
   }, [user, load])
+
+  // Comprobación ligera para el aviso «registrar en el diario» al marcar comidas.
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    api<{ hasToday: boolean }>('/api/health/has-today')
+      .then((d) => active && setHasDiaryToday(d.hasToday))
+      .catch(() => active && setHasDiaryToday(null))
+    return () => {
+      active = false
+    }
+  }, [user])
 
   useEffect(() => {
     const t = setTimeout(() => setToday((new Date().getDay() + 6) % 7), 0)
@@ -173,6 +204,31 @@ export function PlanView() {
         jsonBody('PATCH', { done: next })
       )
       if (next) {
+        // Una vez por sesión: si aún no hay registro de hoy en el diario, se
+        // propone anotar cómo ha sentado la comida (buena costumbre, BO-02).
+        if (!diaryNudgeShown.current) {
+          diaryNudgeShown.current = true
+          let hasToday = hasDiaryToday
+          if (hasToday === null) {
+            try {
+              hasToday = (await api<{ hasToday: boolean }>('/api/health/has-today')).hasToday
+              setHasDiaryToday(hasToday)
+            } catch {
+              hasToday = true // si falla la comprobación, no molestar
+            }
+          }
+          if (!hasToday) {
+            toast.success(`«${item.recipe.title}» marcada como cocinada. ¡Buen provecho!`, {
+              description: '¿Cómo te ha sentado? Registra el día en tu diario de salud para ver patrones.',
+              action: {
+                label: 'Registrar en el diario',
+                onClick: () => navigate('health'),
+              },
+              duration: 9000,
+            })
+            return
+          }
+        }
         toast.success(`«${item.recipe.title}» marcada como cocinada. ¡Buen provecho!`)
       }
     } catch (err) {
@@ -335,6 +391,8 @@ export function PlanView() {
       setItems(d.items)
       setChecked(new Set())
       setTemplatesOpen(false)
+      setTemplatesTab('mine')
+      setCommunity(null)
       toast.success(
         `Plantilla «${t.name}» aplicada: ${d.applied} ${d.applied === 1 ? 'receta planificada' : 'recetas planificadas'}.`
       )
@@ -352,6 +410,79 @@ export function PlanView() {
       toast.success(`Plantilla «${t.name}» eliminada.`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la plantilla.')
+    }
+  }
+
+  /* -------------------- Plantillas de la comunidad -------------------- */
+
+  const loadCommunity = useCallback(async () => {
+    setLoadingCommunity(true)
+    try {
+      const d = await api<{ templates: PlanTemplateData[] }>('/api/plan/templates/community')
+      setCommunity(d.templates)
+    } catch (err) {
+      setCommunity([])
+      toast.error(
+        err instanceof Error ? err.message : 'No se pudo cargar la galería de la comunidad.'
+      )
+    } finally {
+      setLoadingCommunity(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (templatesOpen && templatesTab === 'community' && community === null) {
+      void loadCommunity()
+    }
+  }, [templatesOpen, templatesTab, community, loadCommunity])
+
+  const canPublish = !!user && ['NUTRITIONIST', 'DOCTOR', 'COORDINATOR'].includes(user.role)
+
+  /** Publica una plantilla propia en la galería de la comunidad (profesionales). */
+  async function publishTemplate() {
+    if (!publishDialog) return
+    setPublishing(true)
+    try {
+      const d = await api<{ id: string; isPublic: boolean; description: string | null }>(
+        `/api/plan/templates/${publishDialog.id}/publish`,
+        jsonBody('POST', { isPublic: true, description: publishDescription.trim() })
+      )
+      setTemplates((prev) =>
+        (prev ?? []).map((x) =>
+          x.id === d.id ? { ...x, isPublic: true, description: d.description } : x
+        )
+      )
+      setCommunity((prev) =>
+        prev
+          ? [
+              { ...publishDialog, isPublic: true, description: d.description, author: user ? { id: user.id, name: user.name, role: user.role } : undefined },
+              ...prev.filter((x) => x.id !== d.id),
+            ]
+          : prev
+      )
+      setPublishDialog(null)
+      toast.success(`Plantilla «${publishDialog.name}» publicada en la comunidad.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo publicar la plantilla.')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  /** Retira una plantilla propia de la galería de la comunidad. */
+  async function unpublishTemplate(t: PlanTemplateData) {
+    try {
+      await api<{ id: string; isPublic: boolean }>(
+        `/api/plan/templates/${t.id}/publish`,
+        jsonBody('POST', { isPublic: false })
+      )
+      setTemplates((prev) =>
+        (prev ?? []).map((x) => (x.id === t.id ? { ...x, isPublic: false } : x))
+      )
+      setCommunity((prev) => (prev ?? []).filter((x) => x.id !== t.id))
+      toast.success(`Plantilla «${t.name}» retirada de la comunidad.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo retirar la plantilla.')
     }
   }
 
@@ -458,6 +589,9 @@ export function PlanView() {
               </p>
               <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                 {cookedCount} de {plannedCount}
+                <span className="ml-1 font-semibold text-emerald-600/80 dark:text-emerald-400/80">
+                  ({Math.round((cookedCount / plannedCount) * 100)} %)
+                </span>
               </p>
             </div>
             <div
@@ -816,102 +950,307 @@ export function PlanView() {
         </DialogContent>
       </Dialog>
 
-      {/* Listado y aplicación de plantillas */}
-      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
-        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+      {/* Listado y aplicación de plantillas (propias + comunidad) */}
+      <Dialog
+        open={templatesOpen}
+        onOpenChange={(open) => {
+          setTemplatesOpen(open)
+          if (!open) setTemplatesTab('mine')
+        }}
+      >
+        <DialogContent className="grid-cols-[minmax(0,1fr)] max-h-[85vh] overflow-hidden sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <LayoutTemplate aria-hidden="true" className="size-5 text-primary" />
-              Mis plantillas de menú
+              Plantillas de menú
             </DialogTitle>
             <DialogDescription>
               Aplica una plantilla para rellenar tu semana al instante. Sustituirá el plan
               actual si lo tienes.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-            {loadingTemplates ? (
-              <div className="space-y-2 py-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full rounded-xl" />
-                ))}
-              </div>
-            ) : (templates ?? []).length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-center">
-                <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <LayoutTemplate aria-hidden="true" className="size-6" />
-                </span>
-                <p className="text-sm font-medium">Aún no tienes plantillas</p>
-                <p className="max-w-xs text-xs text-muted-foreground">
-                  Organiza una semana que te siente bien y guárdala con «Guardar como plantilla»
-                  para reutilizarla cuando quieras.
-                </p>
-              </div>
-            ) : (
-              (templates ?? []).map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center gap-3 rounded-xl border p-3 transition-colors hover:border-primary/40"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <UtensilsCrossed aria-hidden="true" className="size-4.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'} · guardada el{' '}
-                      {new Date(t.createdAt).toLocaleDateString('es-ES', {
-                        day: 'numeric',
-                        month: 'short',
-                      })}
+          <Tabs value={templatesTab} onValueChange={(v) => setTemplatesTab(v as 'mine' | 'community')}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="mine" className="gap-1.5">
+                <Bookmark aria-hidden="true" className="size-3.5" />
+                Mis plantillas
+              </TabsTrigger>
+              <TabsTrigger value="community" className="gap-1.5">
+                <Globe aria-hidden="true" className="size-3.5" />
+                Comunidad
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Plantillas propias */}
+            <TabsContent value="mine" className="mt-3">
+              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                {loadingTemplates ? (
+                  <div className="space-y-2 py-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                    ))}
+                  </div>
+                ) : (templates ?? []).length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <LayoutTemplate aria-hidden="true" className="size-6" />
+                    </span>
+                    <p className="text-sm font-medium">Aún no tienes plantillas</p>
+                    <p className="max-w-xs text-xs text-muted-foreground">
+                      Organiza una semana que te siente bien y guárdala con «Guardar como plantilla»
+                      para reutilizarla cuando quieras.
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="min-h-9"
-                    disabled={applyingId === t.id}
-                    onClick={() =>
-                      plannedCount > 0 ? setConfirmApply(t) : void applyTemplate(t)
-                    }
-                  >
-                    {applyingId === t.id ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    Aplicar
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-9 shrink-0 text-muted-foreground hover:text-destructive"
-                        aria-label={`Eliminar la plantilla ${t.name}`}
-                      >
-                        <Trash2 aria-hidden="true" className="size-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>¿Eliminar la plantilla «{t.name}»?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Tu plan semanal actual no se verá afectado. Esta acción no se puede deshacer.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          className="bg-destructive text-white hover:bg-destructive/90"
-                          onClick={() => void deleteTemplate(t)}
+                ) : (
+                  (templates ?? []).map((t) => (
+                    <div
+                      key={t.id}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl border p-3 transition-colors hover:border-primary/40',
+                        t.isPublic && 'border-primary/30 bg-primary/[0.04]'
+                      )}
+                    >
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <UtensilsCrossed aria-hidden="true" className="size-4.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                          {t.name}
+                          {t.isPublic && (
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 gap-0.5 border-primary/40 bg-primary/10 px-1.5 py-0 text-[10px] text-primary"
+                            >
+                              <Globe aria-hidden="true" className="size-2.5" />
+                              En la comunidad
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'} · guardada el{' '}
+                          {new Date(t.createdAt).toLocaleDateString('es-ES', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </p>
+                      </div>
+                      {canPublish && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            'size-9 shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            t.isPublic
+                              ? 'text-primary hover:text-primary'
+                              : 'text-muted-foreground hover:text-primary'
+                          )}
+                          aria-label={
+                            t.isPublic
+                              ? `Retirar la plantilla ${t.name} de la comunidad`
+                              : `Publicar la plantilla ${t.name} en la comunidad`
+                          }
+                          title={
+                            t.isPublic ? 'Retirar de la comunidad' : 'Publicar en la comunidad'
+                          }
+                          onClick={() =>
+                            t.isPublic ? void unpublishTemplate(t) : setPublishDialog(t)
+                          }
                         >
-                          Sí, eliminar
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              ))
-            )}
+                          <Globe aria-hidden="true" className="size-4" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        className="min-h-9"
+                        disabled={applyingId === t.id}
+                        onClick={() =>
+                          plannedCount > 0 ? setConfirmApply(t) : void applyTemplate(t)
+                        }
+                      >
+                        {applyingId === t.id ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        Aplicar
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-9 shrink-0 text-muted-foreground hover:text-destructive"
+                            aria-label={`Eliminar la plantilla ${t.name}`}
+                          >
+                            <Trash2 aria-hidden="true" className="size-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar la plantilla «{t.name}»?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tu plan semanal actual no se verá afectado. Esta acción no se puede deshacer.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-white hover:bg-destructive/90"
+                              onClick={() => void deleteTemplate(t)}
+                            >
+                              Sí, eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ))
+                )}
+              </div>
+              {canPublish && (templates ?? []).some((t) => !t.isPublic) && (
+                <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-muted/50 px-2.5 py-2 text-[11px] leading-snug text-muted-foreground">
+                  <Globe aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-primary" />
+                  Como profesional, puedes publicar tus plantillas en la comunidad para que los
+                  pacientes las apliquen con un clic.
+                </p>
+              )}
+            </TabsContent>
+
+            {/* Galería de la comunidad */}
+            <TabsContent value="community" className="mt-3">
+              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                {loadingCommunity ? (
+                  <div className="space-y-2 py-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                    ))}
+                  </div>
+                ) : (community ?? []).length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <span className="flex size-12 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                      <BadgeCheck aria-hidden="true" className="size-6" />
+                    </span>
+                    <p className="text-sm font-medium">Aún no hay plantillas de la comunidad</p>
+                    <p className="max-w-xs text-xs text-muted-foreground">
+                      Cuando profesionales de la plataforma publiquen sus menús tipo,
+                      aparecerán aquí para aplicarlos con un clic.
+                    </p>
+                  </div>
+                ) : (
+                  (community ?? []).map((t) => {
+                    const isProAuthor =
+                      t.author?.role === 'NUTRITIONIST' || t.author?.role === 'DOCTOR'
+                    return (
+                      <div
+                        key={t.id}
+                        className="rounded-xl border border-amber-500/25 bg-gradient-to-b from-amber-500/[0.06] to-transparent p-3 transition-colors hover:border-amber-500/45"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                            <BadgeCheck aria-hidden="true" className="size-5" />
+                          </span>
+                          <div className="min-w-0 flex-1 overflow-hidden">
+                            <p className="truncate text-sm font-semibold">{t.name}</p>
+                            {t.author && (
+                              <p className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                                <UserAvatar name={t.author.name} role={t.author.role as Role} className="size-5" fallbackClassName="text-[9px]" />
+                                <span className="font-medium text-foreground/80">{t.author.name}</span>
+                                <span>· {ROLE_LABELS[t.author.role as keyof typeof ROLE_LABELS] ?? t.author.role}</span>
+                                {isProAuthor && (
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-0.5 border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-700 dark:text-amber-400"
+                                  >
+                                    <BadgeCheck aria-hidden="true" className="size-2.5" />
+                                    Validada por profesionales
+                                  </Badge>
+                                )}
+                              </p>
+                            )}
+                            {t.description && (
+                              <p className="mt-1 line-clamp-2 text-xs leading-snug text-muted-foreground">
+                                {t.description}
+                              </p>
+                            )}
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'}
+                              {typeof t.dayCount === 'number' && (
+                                <> · {t.dayCount} {t.dayCount === 1 ? 'día' : 'días'} planificados</>
+                              )}
+                              {' · '}
+                              {new Date(t.createdAt).toLocaleDateString('es-ES', {
+                                day: 'numeric',
+                                month: 'short',
+                              })}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="min-h-9 shrink-0"
+                            disabled={applyingId === t.id}
+                            onClick={() =>
+                              plannedCount > 0 ? setConfirmApply(t) : void applyTemplate(t)
+                            }
+                          >
+                            {applyingId === t.id ? (
+                              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                            ) : null}
+                            Aplicar
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Publicar una plantilla propia en la galería de la comunidad */}
+      <Dialog open={!!publishDialog} onOpenChange={(o) => !o && setPublishDialog(null)}>
+        <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe aria-hidden="true" className="size-5 text-primary" />
+              Publicar en la comunidad
+            </DialogTitle>
+            <DialogDescription>
+              «{publishDialog?.name}» ({publishDialog?.recipeCount ?? 0}{' '}
+              {(publishDialog?.recipeCount ?? 0) === 1 ? 'receta' : 'recetas'}) aparecerá en la
+              galería de la comunidad para que cualquier paciente la aplique a su plan con un clic.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="template-publish-description">Descripción breve</Label>
+            <Textarea
+              id="template-publish-description"
+              value={publishDescription}
+              onChange={(e) => setPublishDescription(e.target.value)}
+              maxLength={200}
+              rows={3}
+              placeholder="Ej.: Semana suave y baja en residuos, cocinada al vapor, pensada para días de brote leve."
+              aria-describedby="template-publish-count"
+            />
+            <p id="template-publish-count" className="text-right text-xs text-muted-foreground">
+              {publishDescription.length}/200
+            </p>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishDialog(null)} disabled={publishing}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void publishTemplate()}
+              disabled={publishing || !publishDescription.trim()}
+            >
+              {publishing ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Globe aria-hidden="true" className="size-4" />
+              )}
+              Publicar plantilla
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1029,7 +1368,7 @@ function RecipePickerDialog({
 
   return (
     <Dialog open={!!picker} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+      <DialogContent className="grid-cols-[minmax(0,1fr)] max-h-[85vh] overflow-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Añadir receta · {dayLabel} · {slotLabel}</DialogTitle>
           <DialogDescription>
@@ -1089,6 +1428,15 @@ function RecipePickerDialog({
                               <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
                                 <Check aria-hidden="true" className="size-3" />
                                 Apta para tu fase
+                              </span>
+                            )}
+                            {s.matchesInsight && (
+                              <span
+                                className="inline-flex items-center gap-0.5 font-medium text-amber-700 dark:text-amber-400"
+                                title={`Encaja con tu consejo de salud: ${s.matchedTags.join(', ')}`}
+                              >
+                                <Sparkles aria-hidden="true" className="size-3" />
+                                Te puede sentar bien
                               </span>
                             )}
                             {s.matchesCategory && (
