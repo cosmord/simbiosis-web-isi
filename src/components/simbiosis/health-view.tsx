@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
+  Download,
   Info,
   Loader2,
   Minus,
@@ -162,14 +163,29 @@ export function HealthView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <Scale aria-hidden="true" className="size-6 text-primary" />
-          Mis datos de salud
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Tu diario personal para seguir el peso y la intensidad de los síntomas.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <Scale aria-hidden="true" className="size-6 text-primary" />
+            Mis datos de salud
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Tu diario personal para seguir el peso y la intensidad de los síntomas.
+          </p>
+        </div>
+        {entries && entries.length > 0 && (
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              window.location.href = '/api/health/entries/export'
+              toast.success('Exportando tu diario de salud a CSV…')
+            }}
+          >
+            <Download aria-hidden="true" className="size-4" />
+            Exportar CSV
+          </Button>
+        )}
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3">

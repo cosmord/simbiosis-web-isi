@@ -34,6 +34,7 @@ model User {
   healthEntries HealthEntry[]
   favorites     Favorite[]
   mealPlan      MealPlanItem[]
+  notifications Notification[]
   reportsMade   Report[] @relation("Reporter")
   reportsDone   Report[] @relation("Resolver")
 }
@@ -198,4 +199,23 @@ model Report {
   resolvedById String?
   resolver     User?    @relation("Resolver", fields: [resolvedById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
+}
+
+// Notificaciones in-app:
+// type: REPLY | COMMENT | RATING | FAVORITE | LIKE | ACCOUNT | MODERATION
+// linkView/linkId alimentan la navegación SPA (deep link) al abrir la notificación.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  linkView  String?
+  linkId    String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }

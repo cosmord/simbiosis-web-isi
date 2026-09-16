@@ -6,9 +6,28 @@ import {
   authorOfContent,
   suspendUserAndClearSessions,
 } from '@/lib/reports'
+import { notifyAsync } from '@/lib/notify'
 
 const ACTIONS = ['DISMISS', 'REMOVE_CONTENT', 'SUSPEND_USER'] as const
 type ReportAction = (typeof ACTIONS)[number]
+
+const CONTENT_LABELS: Record<string, string> = {
+  RECIPE: 'receta',
+  COMMENT: 'comentario',
+  THREAD: 'hilo del foro',
+  REPLY: 'respuesta',
+  PUBLICATION: 'publicación de salud',
+  USER: 'usuario',
+}
+
+/** Frases con concordancia de género para el aviso de retirada de contenido. */
+const REMOVAL_PHRASES: Record<string, string> = {
+  RECIPE: 'Tu receta ha sido retirada tras la revisión de una denuncia.',
+  COMMENT: 'Tu comentario ha sido retirado tras la revisión de una denuncia.',
+  THREAD: 'Tu hilo del foro ha sido retirado tras la revisión de una denuncia.',
+  REPLY: 'Tu respuesta ha sido retirada tras la revisión de una denuncia.',
+  PUBLICATION: 'Tu publicación de salud ha sido retirada tras la revisión de una denuncia.',
+}
 
 /**
  * PATCH /api/reports/[id] — solo coordinador.
@@ -53,9 +72,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       if (targetUser) {
         await suspendUserAndClearSessions(report.targetId)
+        notifyAsync({
+          userId: targetUser.id,
+          type: 'MODERATION',
+          title: 'Cuenta suspendida',
+          body: `Tu cuenta ha sido suspendida tras la revisión de una denuncia.${cleanNote ? ` Motivo: ${cleanNote}` : ''}`,
+        })
       }
     } else {
       await removeContent(report.targetType, report.targetId)
+      const authorId = await authorOfContent(report.targetType, report.targetId)
+      if (authorId) {
+        const base =
+          REMOVAL_PHRASES[report.targetType] ??
+          `Tu ${CONTENT_LABELS[report.targetType] ?? 'contenido'} ha sido retirado tras la revisión de una denuncia.`
+        notifyAsync({
+          userId: authorId,
+          type: 'MODERATION',
+          title: 'Contenido retirado',
+          body: `${base}${cleanNote ? ` Motivo: ${cleanNote}` : ''}`,
+        })
+      }
     }
     resolutionText = cleanNote ?? 'Contenido eliminado por el coordinador.'
   } else {
@@ -73,6 +110,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       if (targetUser) {
         await suspendUserAndClearSessions(userId)
+        notifyAsync({
+          userId: targetUser.id,
+          type: 'MODERATION',
+          title: 'Cuenta suspendida',
+          body: `Tu cuenta ha sido suspendida tras la revisión de una denuncia.${cleanNote ? ` Motivo: ${cleanNote}` : ''}`,
+        })
       }
     }
     resolutionText = cleanNote ?? 'Usuario suspendido por el coordinador.'

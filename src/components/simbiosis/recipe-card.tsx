@@ -65,7 +65,7 @@ export function RecipeCard({ recipe, showFavorite = true }: RecipeCardProps) {
         role="button"
         tabIndex={0}
         aria-label={`Ver receta: ${recipe.title}`}
-        className="group h-full cursor-pointer overflow-hidden pt-0 transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring"
+        className="group h-full cursor-pointer overflow-hidden pt-0 transition-all duration-200 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => navigate('recipeDetail', { id: recipe.id })}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -75,12 +75,21 @@ export function RecipeCard({ recipe, showFavorite = true }: RecipeCardProps) {
         }}
       >
         <div className="relative aspect-[16/9] w-full overflow-hidden">
-          <ImageWithFallback src={recipe.image} alt={`Foto de ${recipe.title}`} />
+          <ImageWithFallback
+            src={recipe.image}
+            alt={`Foto de ${recipe.title}`}
+            className="transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+          />
+          {/* Velo inferior para legibilidad del badge de validación */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          />
           <Badge className="absolute left-3 top-3 border-transparent bg-background/85 text-foreground shadow-sm backdrop-blur">
             {recipe.category}
           </Badge>
           {isPro && (
-            <Badge className="absolute bottom-3 left-3 gap-1 border-transparent bg-primary/90 text-primary-foreground shadow-sm">
+            <Badge className="absolute bottom-3 left-3 gap-1 border-transparent bg-primary/90 text-primary-foreground shadow-sm transition-transform duration-200 group-hover:-translate-y-0.5">
               <BadgeCheck aria-hidden="true" className="size-3" />
               Validada por profesional
             </Badge>
@@ -93,7 +102,7 @@ export function RecipeCard({ recipe, showFavorite = true }: RecipeCardProps) {
               aria-pressed={favorite}
               disabled={favLoading}
               onClick={toggleFavorite}
-              className="absolute right-3 top-3 size-9 rounded-full border border-border/60 bg-background/85 shadow-sm backdrop-blur hover:bg-background"
+              className="absolute right-3 top-3 size-9 rounded-full border border-border/60 bg-background/85 shadow-sm backdrop-blur transition-transform hover:scale-110 hover:bg-background active:scale-95"
             >
               <Heart
                 aria-hidden="true"

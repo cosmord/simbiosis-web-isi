@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { ok, fail, requireUser } from '@/lib/api-helpers'
+import { notifyAsync } from '@/lib/notify'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
   const thread = await db.thread.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, title: true, userId: true },
   })
   if (!thread || thread.status === 'REMOVED') return fail('Hilo no encontrado.', 404)
 
@@ -30,6 +31,18 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     data: { content, threadId: id, userId: user.id },
     include: { user: { select: { id: true, name: true, role: true } } },
   })
+
+  notifyAsync(
+    {
+      userId: thread.userId,
+      type: 'REPLY',
+      title: 'Nueva respuesta en tu hilo',
+      body: `${user.name} ha respondido a "${thread.title}".`,
+      linkView: 'threadDetail',
+      linkId: thread.id,
+    },
+    user.id
+  )
 
   return ok(
     {

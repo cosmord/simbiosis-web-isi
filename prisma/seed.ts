@@ -15,6 +15,7 @@ function daysAgo(n: number): Date {
 
 async function main() {
   console.log('🌱 Limpiando base de datos...')
+  await db.notification.deleteMany()
   await db.report.deleteMany()
   await db.favorite.deleteMany()
   await db.healthEntry.deleteMany()
@@ -613,6 +614,62 @@ async function main() {
         reporterId: paciente2.id,
         resolvedById: coordinator.id,
         createdAt: daysAgo(5),
+      },
+    ],
+  })
+
+  console.log('🔔 Creando notificaciones de ejemplo...')
+  const t1Author = await db.thread.findUniqueOrThrow({ where: { id: t1.id }, select: { userId: true, title: true } })
+  const r1Author = await db.recipe.findUniqueOrThrow({ where: { id: r1.id }, select: { authorId: true, title: true } })
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600 * 1000)
+  await db.notification.createMany({
+    data: [
+      {
+        userId: t1Author.userId,
+        type: 'REPLY',
+        title: 'Nueva respuesta en tu hilo',
+        body: `Elena Ferrer ha respondido a "${t1Author.title}".`,
+        linkView: 'threadDetail',
+        linkId: t1.id,
+        read: false,
+        createdAt: hoursAgo(3),
+      },
+      {
+        userId: r1Author.authorId,
+        type: 'RATING',
+        title: 'Nueva valoración de tu receta',
+        body: `Ana Martín ha valorado "${r1Author.title}" con 5 estrellas.`,
+        linkView: 'recipeDetail',
+        linkId: r1.id,
+        read: false,
+        createdAt: hoursAgo(8),
+      },
+      {
+        userId: r1Author.authorId,
+        type: 'FAVORITE',
+        title: 'Han guardado tu receta',
+        body: `Pablo Ortega ha añadido "${r1Author.title}" a sus favoritos.`,
+        linkView: 'recipeDetail',
+        linkId: r1.id,
+        read: true,
+        createdAt: hoursAgo(26),
+      },
+      {
+        userId: paciente.id,
+        type: 'ACCOUNT',
+        title: 'Cuenta aprobada',
+        body: '¡Bienvenido/a a Simbiosis! Tu cuenta ha sido aprobada por el coordinador y ya puedes iniciar sesión.',
+        read: true,
+        createdAt: daysAgo(6),
+      },
+      {
+        userId: paciente.id,
+        type: 'LIKE',
+        title: 'Nuevo «me gusta» en tu consejo',
+        body: 'A Elena Ferrer le ha gustado tu publicación.',
+        linkView: 'publications',
+        read: false,
+        createdAt: hoursAgo(30),
       },
     ],
   })

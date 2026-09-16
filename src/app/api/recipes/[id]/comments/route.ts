@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { ok, fail, requireUser } from '@/lib/api-helpers'
+import { notifyAsync } from '@/lib/notify'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
   const recipe = await db.recipe.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, title: true, authorId: true },
   })
   if (!recipe || recipe.status === 'REMOVED') return fail('Receta no encontrada.', 404)
 
@@ -30,6 +31,18 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     data: { content, userId: user.id, recipeId: id },
     include: { user: { select: { id: true, name: true, role: true } } },
   })
+
+  notifyAsync(
+    {
+      userId: recipe.authorId,
+      type: 'COMMENT',
+      title: 'Nuevo comentario en tu receta',
+      body: `${user.name} ha comentado en "${recipe.title}".`,
+      linkView: 'recipeDetail',
+      linkId: recipe.id,
+    },
+    user.id
+  )
 
   return ok(
     {

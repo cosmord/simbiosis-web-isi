@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { ok, fail, requireUser } from '@/lib/api-helpers'
+import { notifyAsync } from '@/lib/notify'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,7 +13,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
 
   const publication = await db.healthPublication.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, title: true, userId: true },
   })
   if (!publication || publication.status === 'REMOVED')
     return fail('Publicación no encontrada.', 404)
@@ -25,6 +26,16 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
     await db.publicationLike.delete({ where: { id: existing.id } })
   } else {
     await db.publicationLike.create({ data: { publicationId: id, userId: user.id } })
+    notifyAsync(
+      {
+        userId: publication.userId,
+        type: 'LIKE',
+        title: 'Nuevo «me gusta» en tu consejo',
+        body: `A ${user.name} le ha gustado tu publicación «${publication.title}».`,
+        linkView: 'publications',
+      },
+      user.id
+    )
   }
 
   const likesCount = await db.publicationLike.count({ where: { publicationId: id } })

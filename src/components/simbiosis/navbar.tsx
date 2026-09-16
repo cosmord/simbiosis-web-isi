@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { RoleBadge, UserAvatar } from './user-bits'
+import { NotificationBell } from './notification-bell'
 import { api, jsonBody } from '@/lib/client-api'
 import { useSimbiosis, type View } from '@/lib/store'
 import { ROLE_LABELS } from '@/lib/types'
@@ -267,6 +268,8 @@ export function Navbar() {
 
         {/* Acciones a la derecha */}
         <div className="flex items-center gap-1.5">
+          {user && <NotificationBell key={user.id} />}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

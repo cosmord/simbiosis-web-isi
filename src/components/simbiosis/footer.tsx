@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { ChefHat, TriangleAlert } from 'lucide-react'
+import { ChefHat, Info, TriangleAlert } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { useSimbiosis, type View } from '@/lib/store'
+import { AboutDialog } from './about-dialog'
 
 const FOOTER_LINKS: { view: View; label: string }[] = [
   { view: 'home', label: 'Inicio' },
@@ -54,6 +55,25 @@ export function Footer() {
               ))}
             </ul>
           </nav>
+
+          <div className="space-y-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Proyecto
+            </h2>
+            <AboutDialog>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Info aria-hidden="true" className="size-3.5" />
+                Acerca del proyecto
+              </button>
+            </AboutDialog>
+            <p className="max-w-56 text-xs leading-relaxed text-muted-foreground/80">
+              Objetivos de negocio, partes interesadas y alcance del caso práctico.
+              También con la tecla «?».
+            </p>
+          </div>
         </div>
 
         <div className="mt-6 flex items-start gap-2 rounded-lg border border-amber-200 bg-accent/60 px-3 py-2.5 dark:border-amber-900">

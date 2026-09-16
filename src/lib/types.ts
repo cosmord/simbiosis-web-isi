@@ -367,6 +367,33 @@ export interface PlanItemData {
   recipe: PlanRecipeSummary
 }
 
+/* --------------------------- Notificaciones ------------------------------ */
+
+export type NotificationType =
+  | 'REPLY'
+  | 'COMMENT'
+  | 'RATING'
+  | 'FAVORITE'
+  | 'LIKE'
+  | 'ACCOUNT'
+  | 'MODERATION'
+
+export interface NotificationData {
+  id: string
+  type: NotificationType
+  title: string
+  body: string
+  linkView: string | null
+  linkId: string | null
+  read: boolean
+  createdAt: string
+}
+
+export interface NotificationsResponse {
+  notifications: NotificationData[]
+  unread: number
+}
+
 /* --------------------------- Perfil público ----------------------------- */
 
 export interface PublicProfileData {

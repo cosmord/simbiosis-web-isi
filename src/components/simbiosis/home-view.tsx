@@ -5,7 +5,9 @@ import Image from 'next/image'
 import { motion } from 'framer-motion'
 import {
   ArrowRight,
+  BadgeCheck,
   BookOpenCheck,
+  CalendarHeart,
   ChefHat,
   Eye,
   HeartPulse,
@@ -87,6 +89,29 @@ export function HomeView() {
             className="object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-stone-950/85 via-stone-950/45 to-stone-950/10" />
+
+          {/* Chips flotantes decorativos (solo pantallas grandes) */}
+          <motion.div
+            aria-hidden="true"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.5 }}
+            className="absolute right-6 top-6 hidden items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm backdrop-blur-md lg:flex"
+          >
+            <BadgeCheck aria-hidden="true" className="size-3.5 text-emerald-300" />
+            Recetas validadas por profesionales
+          </motion.div>
+          <motion.div
+            aria-hidden="true"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.5 }}
+            className="absolute right-24 top-16 hidden items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm backdrop-blur-md lg:flex"
+          >
+            <CalendarHeart aria-hidden="true" className="size-3.5 text-amber-300" />
+            Planifica tu menú semanal
+          </motion.div>
+
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
