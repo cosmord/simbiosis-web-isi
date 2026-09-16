@@ -1,0 +1,666 @@
+     1→'use client'
+     2→
+     3→import { useCallback, useEffect, useMemo, useState } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import {
+     6→  CalendarDays,
+     7→  Check,
+     8→  ClipboardCopy,
+     9→  Cookie,
+    10→  Copy,
+    11→  Download,
+    12→  Loader2,
+    13→  Moon,
+    14→  Plus,
+    15→  Printer,
+    16→  ShoppingBasket,
+    17→  Sun,
+    18→  Sunrise,
+    19→  Trash2,
+    20→  UtensilsCrossed,
+    21→  X,
+    22→} from 'lucide-react'
+    23→import { toast } from 'sonner'
+    24→import { Button } from '@/components/ui/button'
+    25→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    26→import { Badge } from '@/components/ui/badge'
+    27→import { Input } from '@/components/ui/input'
+    28→import { Skeleton } from '@/components/ui/skeleton'
+    29→import { Separator } from '@/components/ui/separator'
+    30→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    31→import {
+    32→  Dialog,
+    33→  DialogContent,
+    34→  DialogDescription,
+    35→  DialogHeader,
+    36→  DialogTitle,
+    37→} from '@/components/ui/dialog'
+    38→import {
+    39→  AlertDialog,
+    40→  AlertDialogAction,
+    41→  AlertDialogCancel,
+    42→  AlertDialogContent,
+    43→  AlertDialogDescription,
+    44→  AlertDialogFooter,
+    45→  AlertDialogHeader,
+    46→  AlertDialogTitle,
+    47→  AlertDialogTrigger,
+    48→} from '@/components/ui/alert-dialog'
+    49→import { ImageWithFallback } from './image-with-fallback'
+    50→import { EmptyState } from './empty-state'
+    51→import { api, jsonBody } from '@/lib/client-api'
+    52→import { useSimbiosis } from '@/lib/store'
+    53→import {
+    54→  PLAN_DAY_NAMES,
+    55→  PLAN_SLOTS,
+    56→  type PlanItemData,
+    57→  type PlanRecipeSummary,
+    58→  type PlanSlot,
+    59→  type RecipeCardData,
+    60→} from '@/lib/types'
+    61→import { cn } from '@/lib/utils'
+    62→
+    63→const SLOT_ICONS = {
+    64→  sunrise: Sunrise,
+    65→  sun: Sun,
+    66→  moon: Moon,
+    67→  cookie: Cookie,
+    68→} as const
+    69→
+    70→interface ShoppingEntry {
+    71→  key: string
+    72→  label: string
+    73→  count: number
+    74→}
+    75→
+    76→/** Agrupa los ingredientes de todas las recetas del plan. */
+    77→function buildShoppingList(items: PlanItemData[]): ShoppingEntry[] {
+    78→  const map = new Map<string, ShoppingEntry>()
+    79→  for (const item of items) {
+    80→    for (const raw of item.recipe.ingredients) {
+    81→      const label = raw.replace(/\s+/g, ' ').trim()
+    82→      if (!label) continue
+    83→      const key = label.toLowerCase()
+    84→      const existing = map.get(key)
+    85→      if (existing) existing.count += 1
+    86→      else map.set(key, { key, label, count: 1 })
+    87→    }
+    88→  }
+    89→  return Array.from(map.values()).sort(
+    90→    (a, b) => b.count - a.count || a.label.localeCompare(b.label, 'es')
+    91→  )
+    92→}
+    93→
+    94→/** Planificador semanal: organiza recetas en 7 días × 4 franjas y genera la lista de la compra. */
+    95→export function PlanView() {
+    96→  const { user, setAuthOpen, navigate, bumpRefresh } = useSimbiosis()
+    97→  const [items, setItems] = useState<PlanItemData[] | null>(null)
+    98→  const [loading, setLoading] = useState(true)
+    99→  const [picker, setPicker] = useState<{ day: number; slot: PlanSlot } | null>(null)
+   100→  const [clearOpen, setClearOpen] = useState(false)
+   101→  const [checked, setChecked] = useState<Set<string>>(new Set())
+   102→  const [copySource, setCopySource] = useState<number | null>(null)
+   103→  // Día actual (0 = lunes … 6 = domingo). Se resuelve tras montar para evitar
+   104→  // discrepancias de hidratación entre servidor y cliente.
+   105→  const [today, setToday] = useState<number | null>(null)
+   106→
+   107→  const fetchPlan = useCallback(async () => {
+   108→    const d = await api<{ items: PlanItemData[] }>('/api/plan')
+   109→    setItems(d.items)
+   110→  }, [])
+   111→
+   112→  const load = useCallback(async () => {
+   113→    setLoading(true)
+   114→    try {
+   115→      await fetchPlan()
+   116→    } catch (err) {
+   117→      setItems([])
+   118→      toast.error(err instanceof Error ? err.message : 'No se pudo cargar tu plan semanal.')
+   119→    } finally {
+   120→      setLoading(false)
+   121→    }
+   122→  }, [fetchPlan])
+   123→
+   124→  useEffect(() => {
+   125→    if (user) void load()
+   126→    else setLoading(false)
+   127→  }, [user, load])
+   128→
+   129→  useEffect(() => {
+   130→    const t = setTimeout(() => setToday((new Date().getDay() + 6) % 7), 0)
+   131→    return () => clearTimeout(t)
+   132→  }, [])
+   133→
+   134→  const shoppingList = useMemo(() => buildShoppingList(items ?? []), [items])
+   135→
+   136→  function itemAt(day: number, slot: PlanSlot): PlanItemData | undefined {
+   137→    return items?.find((it) => it.day === day && it.slot === slot)
+   138→  }
+   139→
+   140→  async function assign(recipe: PlanRecipeSummary | RecipeCardData) {
+   141→    if (!picker) return
+   142→    try {
+   143→      const d = await api<{ item: PlanItemData }>(
+   144→        '/api/plan',
+   145→        jsonBody('PUT', { day: picker.day, slot: picker.slot, recipeId: recipe.id })
+   146→      )
+   147→      setItems((prev) => {
+   148→        const rest = (prev ?? []).filter(
+   149→          (it) => !(it.day === picker.day && it.slot === picker.slot)
+   150→        )
+   151→        return [...rest, d.item]
+   152→      })
+   153→      toast.success(`«${recipe.title}» añadida al ${PLAN_DAY_NAMES[picker.day].toLowerCase()} (${PLAN_SLOTS.find((s) => s.value === picker.slot)?.label.toLowerCase()}).`)
+   154→      setPicker(null)
+   155→    } catch (err) {
+   156→      toast.error(err instanceof Error ? err.message : 'No se pudo añadir la receta al plan.')
+   157→    }
+   158→  }
+   159→
+   160→  async function removeItem(id: string) {
+   161→    try {
+   162→      await api(`/api/plan/${id}`, jsonBody('DELETE', {}))
+   163→      setItems((prev) => (prev ?? []).filter((it) => it.id !== id))
+   164→      toast.success('Receta quitada del plan.')
+   165→    } catch (err) {
+   166→      toast.error(err instanceof Error ? err.message : 'No se pudo quitar la receta.')
+   167→    }
+   168→  }
+   169→
+   170→  async function clearAll() {
+   171→    try {
+   172→      await api('/api/plan', jsonBody('DELETE', {}))
+   173→      setItems([])
+   174→      setChecked(new Set())
+   175→      toast.success('Plan semanal vaciado.')
+   176→    } catch (err) {
+   177→      toast.error(err instanceof Error ? err.message : 'No se pudo vaciar el plan.')
+   178→    }
+   179→  }
+   180→
+   181→  /** Copia todas las franjas planificadas de un día a otro (sobrescribe el destino). */
+   182→  async function copyDay(from: number, to: number) {
+   183→    const source = PLAN_SLOTS.map(({ value }) => itemAt(from, value)).filter(
+   184→      (it): it is PlanItemData => !!it
+   185→    )
+   186→    setCopySource(null)
+   187→    if (source.length === 0) return
+   188→    try {
+   189→      await Promise.all(
+   190→        source.map((it) =>
+   191→          api('/api/plan', jsonBody('PUT', { day: to, slot: it.slot, recipeId: it.recipe.id }))
+   192→        )
+   193→      )
+   194→      await fetchPlan()
+   195→      toast.success(
+   196→        `Menú del ${PLAN_DAY_NAMES[from].toLowerCase()} copiado al ${PLAN_DAY_NAMES[to].toLowerCase()} (${source.length} ${source.length === 1 ? 'receta' : 'recetas'}).`
+   197→      )
+   198→    } catch (err) {
+   199→      toast.error(err instanceof Error ? err.message : 'No se pudo copiar el menú del día.')
+   200→    }
+   201→  }
+   202→
+   203→  /** Descarga la lista de la compra como CSV compatible con Excel-es (BOM + ";"). */
+   204→  function exportCsv() {
+   205→    if (shoppingList.length === 0) return
+   206→    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+   207→    const rows = ['Ingrediente;Raciones que lo usan']
+   208→    for (const e of shoppingList) rows.push(`${esc(e.label)};${e.count}`)
+   209→    const csv = '\uFEFF' + rows.join('\r\n')
+   210→    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+   211→    const a = document.createElement('a')
+   212→    a.href = url
+   213→    a.download = `lista-compra-simbiosis-${new Date().toISOString().slice(0, 10)}.csv`
+   214→    a.click()
+   215→    URL.revokeObjectURL(url)
+   216→    toast.success('Lista de la compra exportada a CSV.')
+   217→  }
+   218→
+   219→  async function copyList() {
+   220→    if (shoppingList.length === 0) return
+   221→    const text = [
+   222→      '🛒 Lista de la compra — Simbiosis',
+   223→      '',
+   224→      ...shoppingList.map((e) => `${e.count > 1 ? `(x${e.count}) ` : ''}${e.label}`),
+   225→    ].join('\n')
+   226→    try {
+   227→      await navigator.clipboard.writeText(text)
+   228→      toast.success('Lista de la compra copiada al portapapeles.')
+   229→    } catch {
+   230→      toast.warning('Tu navegador no permite copiar automáticamente. Copia manualmente la lista.')
+   231→    }
+   232→  }
+   233→
+   234→  if (!user) {
+   235→    return (
+   236→      <EmptyState
+   237→        icon={CalendarDays}
+   238→        title="Planifica tu semana con Simbiosis"
+   239→        description="Organiza tus recetas en un menú semanal y genera automáticamente tu lista de la compra. Inicia sesión para empezar."
+   240→        actionLabel="Iniciar sesión"
+   241→        onAction={() => setAuthOpen(true)}
+   242→      />
+   243→    )
+   244→  }
+   245→
+   246→  if (loading) {
+   247→    return (
+   248→      <div className="space-y-4">
+   249→        <Skeleton className="h-9 w-64" />
+   250→        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+   251→          {Array.from({ length: 7 }).map((_, i) => (
+   252→            <Skeleton key={i} className="h-64 rounded-xl" />
+   253→          ))}
+   254→        </div>
+   255→      </div>
+   256→    )
+   257→  }
+   258→
+   259→  const plannedCount = items?.length ?? 0
+   260→
+   261→  return (
+   262→    <div className="space-y-5">
+   263→      {/* Cabecera */}
+   264→      <div className="flex flex-wrap items-end justify-between gap-3">
+   265→        <div>
+   266→          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+   267→            <CalendarDays aria-hidden="true" className="size-7 text-primary" />
+   268→            Mi plan semanal
+   269→          </h1>
+   270→          <p className="mt-1 text-sm text-muted-foreground">
+   271→            Organiza tus menús de la semana y controla los síntomas con una dieta planificada.
+   272→          </p>
+   273→        </div>
+   274→        {plannedCount > 0 && (
+   275→          <div className="flex items-center gap-2">
+   276→            <Button variant="outline" className="min-h-11" onClick={() => window.print()}>
+   277→              <Printer aria-hidden="true" className="size-4" />
+   278→              Imprimir plan
+   279→            </Button>
+   280→            <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+   281→              <AlertDialogTrigger asChild>
+   282→                <Button variant="outline" className="min-h-11">
+   283→                  <Trash2 aria-hidden="true" className="size-4" />
+   284→                  Vaciar semana
+   285→                </Button>
+   286→              </AlertDialogTrigger>
+   287→            <AlertDialogContent>
+   288→              <AlertDialogHeader>
+   289→                <AlertDialogTitle>¿Vaciar todo el plan semanal?</AlertDialogTitle>
+   290→                <AlertDialogDescription>
+   291→                  Se quitarán las {plannedCount} recetas planificadas. Esta acción no se puede deshacer.
+   292→                </AlertDialogDescription>
+   293→              </AlertDialogHeader>
+   294→              <AlertDialogFooter>
+   295→                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+   296→                <AlertDialogAction
+   297→                  className="bg-destructive text-white hover:bg-destructive/90"
+   298→                  onClick={() => void clearAll()}
+   299→                >
+   300→                  Sí, vaciar
+   301→                </AlertDialogAction>
+   302→              </AlertDialogFooter>
+   303→            </AlertDialogContent>
+   304→          </AlertDialog>
+   305→          </div>
+   306→        )}
+   307→      </div>
+   308→
+   309→      <div className="print-plan print-plan-layout grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
+   310→        {/* Rejilla de días */}
+   311→        <div className="print-plan-grid grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+   312→          {/* Cabecera exclusiva de la hoja impresa */}
+   313→          <header className="hidden print:mb-3 print:block sm:col-span-2 2xl:col-span-3">
+   314→            <h1 className="text-lg font-bold">Mi plan semanal · Simbiosis</h1>
+   315→            <p className="text-xs text-muted-foreground">
+   316→              Menú para la semana del {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} · {plannedCount} {plannedCount === 1 ? 'receta planificada' : 'recetas planificadas'}
+   317→            </p>
+   318→          </header>
+   319→          {PLAN_DAY_NAMES.map((dayName, day) => {
+   320→            const dayItems = PLAN_SLOTS.map((slot) => ({ slot, item: itemAt(day, slot.value) }))
+   321→            const filled = dayItems.filter((d) => d.item).length
+   322→            return (
+   323→              <motion.div
+   324→                key={dayName}
+   325→                initial={{ opacity: 0, y: 8 }}
+   326→                animate={{ opacity: 1, y: 0 }}
+   327→                transition={{ duration: 0.25, delay: day * 0.03 }}
+   328→              >
+   329→                <Card
+   330→                  className={cn(
+   331→                    'h-full transition-shadow',
+   332→                    filled === 4 && 'border-primary/40',
+   333→                    today === day && 'border-primary/60 shadow-md ring-2 ring-primary/30'
+   334→                  )}
+   335→                >
+   336→                  <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+   337→                    <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
+   338→                      {dayName}
+   339→                      {today === day && (
+   340→                        <Badge className="gap-0.5 border-transparent bg-amber-400 px-1.5 py-0 text-[10px] font-bold text-amber-950">
+   341→                          <CalendarDays aria-hidden="true" className="size-2.5" />
+   342→                          Hoy
+   343→                        </Badge>
+   344→                      )}
+   345→                    </CardTitle>
+   346→                    <div className="flex items-center gap-1">
+   347→                      <Badge
+   348→                        variant="outline"
+   349→                        className={cn(
+   350→                          'px-1.5 py-0 text-[10px]',
+   351→                          filled === 4
+   352→                            ? 'border-primary/40 bg-primary/10 text-primary'
+   353→                            : 'text-muted-foreground'
+   354→                        )}
+   355→                      >
+   356→                        {filled}/4
+   357→                      </Badge>
+   358→                      {filled > 0 && (
+   359→                        <Popover open={copySource === day} onOpenChange={(o) => setCopySource(o ? day : null)}>
+   360→                          <PopoverTrigger asChild>
+   361→                            <Button
+   362→                              variant="ghost"
+   363→                              size="icon"
+   364→                              className="size-7 rounded-full text-muted-foreground hover:text-primary print:hidden"
+   365→                              aria-label={`Copiar el menú del ${dayName.toLowerCase()} a otro día`}
+   366→                              title="Copiar a otro día"
+   367→                            >
+   368→                              <Copy aria-hidden="true" className="size-3.5" />
+   369→                            </Button>
+   370→                          </PopoverTrigger>
+   371→                          <PopoverContent align="end" className="w-56 p-2">
+   372→                            <p className="px-2 pb-1.5 text-xs font-semibold text-muted-foreground">
+   373→                              Copiar menú del {dayName.toLowerCase()} a…
+   374→                            </p>
+   375→                            <div className="space-y-0.5">
+   376→                              {PLAN_DAY_NAMES.map((targetName, target) =>
+   377→                                target === day ? null : (
+   378→                                  <button
+   379→                                    key={targetName}
+   380→                                    type="button"
+   381→                                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+   382→                                    onClick={() => void copyDay(day, target)}
+   383→                                    aria-label={`Copiar el menú del ${dayName.toLowerCase()} al ${targetName.toLowerCase()}`}
+   384→                                  >
+   385→                                    {targetName}
+   386→                                    {PLAN_SLOTS.filter(({ value }) => itemAt(target, value)).length > 0 && (
+   387→                                      <span className="text-[10px] text-muted-foreground">
+   388→                                        {PLAN_SLOTS.filter(({ value }) => itemAt(target, value)).length}/4
+   389→                                      </span>
+   390→                                    )}
+   391→                                  </button>
+   392→                                )
+   393→                              )}
+   394→                            </div>
+   395→                          </PopoverContent>
+   396→                        </Popover>
+   397→                      )}
+   398→                    </div>
+   399→                  </CardHeader>
+   400→                  <CardContent className="space-y-1.5">
+   401→                    {dayItems.map(({ slot: slotDef, item }) => {
+   402→                      const Icon = SLOT_ICONS[slotDef.icon]
+   403→                      const slotLabel = PLAN_SLOTS.find((s) => s.value === slotDef.value)?.label ?? ''
+   404→                      return (
+   405→                        <div
+   406→                          key={slotDef.value}
+   407→                          className="flex items-center gap-2 rounded-lg border border-dashed px-2 py-1.5"
+   408→                        >
+   409→                          <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+   410→                          <span className="w-16 shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+   411→                            {slotLabel}
+   412→                          </span>
+   413→                          {item ? (
+   414→                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+   415→                              <button
+   416→                                type="button"
+   417→                                className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:text-primary hover:underline"
+   418→                                onClick={() => navigate('recipeDetail', { id: item.recipe.id })}
+   419→                                aria-label={`Ver receta ${item.recipe.title}`}
+   420→                              >
+   421→                                {item.recipe.title}
+   422→                              </button>
+   423→                              <Button
+   424→                                variant="ghost"
+   425→                                size="icon"
+   426→                                className="size-6 shrink-0 rounded-full text-muted-foreground hover:text-destructive print:hidden"
+   427→                                onClick={() => void removeItem(item.id)}
+   428→                                aria-label={`Quitar ${item.recipe.title} del ${slotLabel.toLowerCase()} del ${dayName.toLowerCase()}`}
+   429→                              >
+   430→                                <X aria-hidden="true" className="size-3.5" />
+   431→                              </Button>
+   432→                            </div>
+   433→                          ) : (
+   434→                            <button
+   435→                              type="button"
+   436→                              className="flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring print:hidden"
+   437→                              onClick={() => setPicker({ day, slot: slotDef.value })}
+   438→                              aria-label={`Añadir receta al ${slotLabel.toLowerCase()} del ${dayName.toLowerCase()}`}
+   439→                            >
+   440→                              <Plus aria-hidden="true" className="size-3.5" />
+   441→                              Añadir
+   442→                            </button>
+   443→                          )}
+   444→                        </div>
+   445→                      )
+   446→                    })}
+   447→                  </CardContent>
+   448→                </Card>
+   449→              </motion.div>
+   450→            )
+   451→          })}
+   452→        </div>
+   453→
+   454→        {/* Lista de la compra */}
+   455→        <Card className="xl:sticky xl:top-20 h-fit">
+   456→          <CardHeader className="pb-3">
+   457→            <CardTitle className="flex items-center gap-2 text-base">
+   458→              <ShoppingBasket aria-hidden="true" className="size-4.5 text-primary" />
+   459→              Lista de la compra
+   460→              {plannedCount > 0 && (
+   461→                <Badge variant="secondary" className="ml-auto">
+   462→                  {plannedCount} {plannedCount === 1 ? 'receta' : 'recetas'}
+   463→                </Badge>
+   464→              )}
+   465→            </CardTitle>
+   466→          </CardHeader>
+   467→          <CardContent className="space-y-3">
+   468→            {shoppingList.length === 0 ? (
+   469→              <p className="text-sm text-muted-foreground">
+   470→                Añade recetas a tu plan y aquí aparecerán todos los ingredientes que necesitas,
+   471→                agrupados automáticamente.
+   472→              </p>
+   473→            ) : (
+   474→              <>
+   475→                <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
+   476→                  {shoppingList.map((entry) => {
+   477→                    const isChecked = checked.has(entry.key)
+   478→                    return (
+   479→                      <li key={entry.key}>
+   480→                        <button
+   481→                          type="button"
+   482→                          onClick={() =>
+   483→                            setChecked((prev) => {
+   484→                              const next = new Set(prev)
+   485→                              if (next.has(entry.key)) next.delete(entry.key)
+   486→                              else next.add(entry.key)
+   487→                              return next
+   488→                            })
+   489→                          }
+   490→                          className={cn(
+   491→                            'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+   492→                            isChecked && 'text-muted-foreground'
+   493→                          )}
+   494→                          aria-pressed={isChecked}
+   495→                        >
+   496→                          <span
+   497→                            aria-hidden="true"
+   498→                            className={cn(
+   499→                              'flex size-4.5 shrink-0 items-center justify-center rounded-full border transition-colors',
+   500→                              isChecked
+   501→                                ? 'border-primary bg-primary text-primary-foreground'
+   502→                                : 'border-input'
+   503→                            )}
+   504→                          >
+   505→                            {isChecked && <Check className="size-3" />}
+   506→                          </span>
+   507→                          <span className={cn('min-w-0 flex-1', isChecked && 'line-through')}>
+   508→                            {entry.label}
+   509→                          </span>
+   510→                          {entry.count > 1 && (
+   511→                            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground">
+   512→                              ×{entry.count}
+   513→                            </Badge>
+   514→                          )}
+   515→                        </button>
+   516→                      </li>
+   517→                    )
+   518→                  })}
+   519→                </ul>
+   520→                <Separator />
+   521→                <div className="flex items-center justify-between gap-2 print:hidden">
+   522→                  <span className="text-xs text-muted-foreground">
+   523→                    {checked.size} de {shoppingList.length} marcados
+   524→                  </span>
+   525→                  <div className="flex items-center gap-1.5">
+   526→                    <Button
+   527→                      variant="outline"
+   528→                      size="sm"
+   529→                      className="min-h-9"
+   530→                      onClick={exportCsv}
+   531→                      aria-label="Exportar la lista de la compra en CSV"
+   532→                    >
+   533→                      <Download aria-hidden="true" className="size-4" />
+   534→                      CSV
+   535→                    </Button>
+   536→                    <Button variant="outline" size="sm" className="min-h-9" onClick={() => void copyList()}>
+   537→                      <ClipboardCopy aria-hidden="true" className="size-4" />
+   538→                      Copiar lista
+   539→                    </Button>
+   540→                  </div>
+   541→                </div>
+   542→              </>
+   543→            )}
+   544→          </CardContent>
+   545→        </Card>
+   546→      </div>
+   547→
+   548→      {/* Selector de receta */}
+   549→      <RecipePickerDialog
+   550→        picker={picker}
+   551→        onClose={() => setPicker(null)}
+   552→        onPick={(recipe) => void assign(recipe)}
+   553→      />
+   554→    </div>
+   555→  )
+   556→}
+   557→
+   558→/** Diálogo para buscar y elegir la receta que ocupará un hueco del plan. */
+   559→function RecipePickerDialog({
+   560→  picker,
+   561→  onClose,
+   562→  onPick,
+   563→}: {
+   564→  picker: { day: number; slot: PlanSlot } | null
+   565→  onClose: () => void
+   566→  onPick: (recipe: PlanRecipeSummary | RecipeCardData) => void
+   567→}) {
+   568→  const [query, setQuery] = useState('')
+   569→  const [results, setResults] = useState<PlanRecipeSummary[] | null>(null)
+   570→  const [loading, setLoading] = useState(false)
+   571→
+   572→  useEffect(() => {
+   573→    if (!picker) return
+   574→    let active = true
+   575→    const t = setTimeout(() => {
+   576→      setLoading(true)
+   577→      api<{ recipes: (RecipeCardData & { ingredients?: string[] })[] }>(
+   578→        `/api/recipes?q=${encodeURIComponent(query)}`
+   579→      )
+   580→        .then((d) => {
+   581→          if (!active) return
+   582→          setResults(
+   583→            d.recipes.map((r) => ({
+   584→              id: r.id,
+   585→              title: r.title,
+   586→              image: r.image,
+   587→              category: r.category,
+   588→              ingredients: r.ingredients ?? [],
+   589→              prepTime: r.prepTime,
+   590→              servings: r.servings,
+   591→              author: r.author ?? { id: '', name: 'Comunidad', role: 'PATIENT' },
+   592→            }))
+   593→          )
+   594→        })
+   595→        .catch(() => active && setResults([]))
+   596→        .finally(() => active && setLoading(false))
+   597→    }, 250)
+   598→    return () => {
+   599→      active = false
+   600→      clearTimeout(t)
+   601→    }
+   602→  }, [picker, query])
+   603→
+   604→  function handleClose() {
+   605→    setQuery('')
+   606→    setResults(null)
+   607→    onClose()
+   608→  }
+   609→
+   610→  const slotLabel = picker ? PLAN_SLOTS.find((s) => s.value === picker.slot)?.label : ''
+   611→  const dayLabel = picker ? PLAN_DAY_NAMES[picker.day] : ''
+   612→
+   613→  return (
+   614→    <Dialog open={!!picker} onOpenChange={(open) => !open && handleClose()}>
+   615→      <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+   616→        <DialogHeader>
+   617→          <DialogTitle>Añadir receta · {dayLabel} · {slotLabel}</DialogTitle>
+   618→          <DialogDescription>
+   619→            Busca una receta de la comunidad para este hueco del plan. Sustituirá la actual si la hay.
+   620→          </DialogDescription>
+   621→        </DialogHeader>
+   622→        <Input
+   623→          placeholder="Buscar recetas por título o descripción…"
+   624→          value={query}
+   625→          onChange={(e) => setQuery(e.target.value)}
+   626→          aria-label="Buscar recetas para el plan"
+   627→        />
+   628→        <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+   629→          {results === null ? (
+   630→            <div className="flex items-center justify-center py-8">
+   631→              <Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />
+   632→            </div>
+   633→          ) : (results ?? []).length === 0 ? (
+   634→            <p className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+   635→              <UtensilsCrossed aria-hidden="true" className="size-6" />
+   636→              No hay recetas que coincidan con la búsqueda.
+   637→            </p>
+   638→          ) : (
+   639→            (results ?? []).map((recipe) => (
+   640→              <button
+   641→                key={recipe.id}
+   642→                type="button"
+   643→                className="flex w-full items-center gap-3 rounded-xl border p-2 text-left outline-none transition-colors hover:border-primary/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+   644→                onClick={() => onPick(recipe)}
+   645→                aria-label={`Añadir ${recipe.title} al plan`}
+   646→              >
+   647→                <span className="relative size-12 shrink-0 overflow-hidden rounded-lg">
+   648→                  <ImageWithFallback src={recipe.image} alt="" sizes="48px" icon="none" />
+   649→                </span>
+   650→                <span className="min-w-0 flex-1">
+   651→                  <span className="block truncate text-sm font-medium">{recipe.title}</span>
+   652→                  <span className="block text-xs text-muted-foreground">
+   653→                    {recipe.category} · {recipe.prepTime} min · {recipe.servings}{' '}
+   654→                    {recipe.servings === 1 ? 'ración' : 'raciones'}
+   655→                  </span>
+   656→                </span>
+   657→                <Plus aria-hidden="true" className="size-4 shrink-0 text-primary" />
+   658→              </button>
+   659→            ))
+   660→          )}
+   661→        </div>
+   662→      </DialogContent>
+   663→    </Dialog>
+   664→  )
+   665→}
+   666→

@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import {
+  ArrowRight,
   CalendarDays,
   Download,
   Info,
+  Lightbulb,
   Loader2,
   Minus,
   Scale,
@@ -45,7 +48,7 @@ import {
 import { EmptyState } from './empty-state'
 import { api, jsonBody } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
-import type { HealthEntryData } from '@/lib/types'
+import type { HealthEntryData, HealthInsight } from '@/lib/types'
 import {
   axisDate,
   numEs,
@@ -54,6 +57,7 @@ import {
   symptomLabel,
   todayISO,
 } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface ChartPoint {
   date: string
@@ -64,10 +68,13 @@ interface ChartPoint {
 
 /** Diario de salud privado: registro de peso y síntomas con gráfica e historial. */
 export function HealthView() {
-  const { bumpRefresh } = useSimbiosis()
+  const { bumpRefresh, navigate } = useSimbiosis()
 
   const [entries, setEntries] = useState<HealthEntryData[] | null>(null)
   const [loading, setLoading] = useState(true)
+  // Consejo personalizado calculado por el backend a partir del diario
+  const [insight, setInsight] = useState<HealthInsight | null>(null)
+  const [insightLoading, setInsightLoading] = useState(false)
 
   const [date, setDate] = useState(todayISO())
   const [weight, setWeight] = useState('')
@@ -75,11 +82,27 @@ export function HealthView() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const loadInsight = useCallback(async () => {
+    setInsightLoading(true)
+    try {
+      const d = await api<{ insight: HealthInsight | null; reason: string }>(
+        '/api/health/insights'
+      )
+      setInsight(d.insight)
+    } catch {
+      setInsight(null) // best-effort: si falla, no molesta al usuario
+    } finally {
+      setInsightLoading(false)
+    }
+  }, [])
+
   async function load() {
     setLoading(true)
     try {
       const d = await api<{ entries: HealthEntryData[] }>('/api/health/entries')
       setEntries(d.entries)
+      if (d.entries.length > 0) void loadInsight()
+      else setInsight(null)
     } catch (err) {
       setEntries([])
       toast.error(err instanceof Error ? err.message : 'No se pudieron cargar tus registros.')
@@ -195,6 +218,28 @@ export function HealthView() {
           Esta información es privada y no sustituye el seguimiento médico.
         </p>
       </div>
+
+      {/* Consejo personalizado (se genera tras registrar entradas en el diario) */}
+      {insightLoading && insight === null && (
+        <Card className="py-4">
+          <CardContent className="flex items-center gap-3 px-4">
+            <span className="flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+              <Lightbulb aria-hidden="true" className="size-5" />
+            </span>
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-56" />
+              <Skeleton className="h-3 w-80 max-w-full" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {insight && (
+        <InsightCard
+          insight={insight}
+          onSeeRecipes={(tag) => navigate('recipes', { tag })}
+          onSeePublications={() => navigate('publications')}
+        />
+      )}
 
       {/* Resumen */}
       {summary && (
@@ -490,5 +535,126 @@ export function HealthView() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+/* --------------------------- Consejo personalizado --------------------------- */
+
+const INSIGHT_STYLES = {
+  positive: {
+    border: 'border-emerald-300/60 dark:border-emerald-800',
+    bg: 'bg-gradient-to-br from-emerald-50 via-background to-background dark:from-emerald-950/40 dark:via-background dark:to-background',
+    iconBg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+    badge: 'border-transparent bg-emerald-600 text-white dark:bg-emerald-500 dark:text-emerald-950',
+    badgeLabel: 'Estado favorable',
+  },
+  watch: {
+    border: 'border-amber-300/70 dark:border-amber-800',
+    bg: 'bg-gradient-to-br from-amber-50 via-background to-background dark:from-amber-950/40 dark:via-background dark:to-background',
+    iconBg: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    badge: 'border-transparent bg-amber-500 text-amber-950 dark:bg-amber-400 dark:text-amber-950',
+    badgeLabel: 'Para vigilar',
+  },
+  alert: {
+    border: 'border-rose-300/70 dark:border-rose-800',
+    bg: 'bg-gradient-to-br from-rose-50 via-background to-background dark:from-rose-950/40 dark:via-background dark:to-background',
+    iconBg: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+    badge: 'border-transparent bg-rose-600 text-white dark:bg-rose-500 dark:text-rose-950',
+    badgeLabel: 'Merece atención',
+  },
+} as const
+
+/** Tarjeta con el consejo personalizado generado a partir del diario de salud. */
+function InsightCard({
+  insight,
+  onSeeRecipes,
+  onSeePublications,
+}: {
+  insight: HealthInsight
+  onSeeRecipes: (tag: string) => void
+  onSeePublications: () => void
+}) {
+  const styles = INSIGHT_STYLES[insight.level]
+  const { stats } = insight
+
+  return (
+    <motion.section
+      aria-label="Consejo de salud personalizado"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className={cn(
+        'relative overflow-hidden rounded-xl border px-4 py-4 sm:px-5',
+        styles.border,
+        styles.bg
+      )}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <span
+          className={cn(
+            'flex size-11 shrink-0 items-center justify-center rounded-full shadow-sm',
+            styles.iconBg
+          )}
+        >
+          <Lightbulb aria-hidden="true" className="size-5.5" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-bold tracking-tight">{insight.title}</h2>
+              <Badge className={styles.badge}>{styles.badgeLabel}</Badge>
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-foreground/85">{insight.message}</p>
+          </div>
+
+          <ul className="grid gap-1.5 sm:grid-cols-1">
+            {insight.tips.map((tip) => (
+              <li key={tip} className="flex items-start gap-2 text-sm text-foreground/90">
+                <span
+                  aria-hidden="true"
+                  className={cn('mt-[7px] size-1.5 shrink-0 rounded-full', styles.iconBg)}
+                />
+                {tip}
+              </li>
+            ))}
+          </ul>
+
+          {/* Mini-estadísticas analizadas */}
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline" className="bg-background/60 font-normal">
+              {stats.recentCount} {stats.recentCount === 1 ? 'registro' : 'registros'} esta semana
+            </Badge>
+            {stats.avgRecent !== null && (
+              <Badge variant="outline" className="bg-background/60 font-normal">
+                Media síntomas: {numEs(stats.avgRecent)}/10
+              </Badge>
+            )}
+            {stats.weightDiff !== null && stats.weightDiff !== 0 && (
+              <Badge variant="outline" className="bg-background/60 font-normal">
+                Peso: {stats.weightDiff > 0 ? '+' : ''}
+                {numEs(stats.weightDiff)} kg
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            <Button
+              size="sm"
+              className="min-h-9"
+              onClick={() => onSeeRecipes(insight.suggestedTags[0])}
+            >
+              Ver recetas aptas
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Button>
+            <Button size="sm" variant="outline" className="min-h-9" onClick={onSeePublications}>
+              Consejos de profesionales
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
+              Orientativo, no sustituye el consejo médico.
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.section>
   )
 }

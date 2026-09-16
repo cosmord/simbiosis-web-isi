@@ -367,6 +367,35 @@ export interface PlanItemData {
   recipe: PlanRecipeSummary
 }
 
+/* ---------------------- Plantillas de menú ------------------------------ */
+
+export interface PlanTemplateData {
+  id: string
+  name: string
+  recipeCount: number
+  createdAt: string
+}
+
+/* ------------------- Consejo de salud personalizado --------------------- */
+
+export interface HealthInsight {
+  level: 'positive' | 'watch' | 'alert'
+  title: string
+  message: string
+  tips: string[]
+  suggestedTags: string[]
+  suggestedSuitable: string[]
+  stats: {
+    entriesAnalyzed: number
+    recentCount: number
+    avgRecent: number | null
+    avgPrevious: number | null
+    highDays: number
+    latestSymptoms: number
+    weightDiff: number | null
+  }
+}
+
 /* --------------------------- Notificaciones ------------------------------ */
 
 export type NotificationType =

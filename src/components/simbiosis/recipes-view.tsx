@@ -33,7 +33,7 @@ const SORTS = [
 ]
 
 const ORIGINS = [
-  { value: 'ALL', label: 'Todas las autorías' },
+  { value: 'ALL', label: 'Autorías: todas' },
   { value: 'PRO', label: 'Profesionales' },
   { value: 'COMMUNITY', label: 'Comunidad' },
 ]
@@ -42,7 +42,7 @@ const PAGE_SIZE = 8
 
 /** Listado de recetas con búsqueda, filtros combinables, ordenación y "Cargar más". */
 export function RecipesView() {
-  const { user, navigate, setAuthOpen, refreshKey } = useSimbiosis()
+  const { user, navigate, setAuthOpen, refreshKey, viewParams } = useSimbiosis()
 
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -51,6 +51,15 @@ export function RecipesView() {
   const [sort, setSort] = useState('RECENT')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [selectedSuitable, setSelectedSuitable] = useState<string[]>([])
+
+  // Filtros preseleccionados al navegar desde otras vistas (p. ej. el consejo
+  // personalizado del diario de salud sugiere etiquetas concretas).
+  useEffect(() => {
+    const tag = typeof viewParams.tag === 'string' ? viewParams.tag : null
+    const suitable = typeof viewParams.suitable === 'string' ? viewParams.suitable : null
+    if (tag) setSelectedTags([tag])
+    if (suitable) setSelectedSuitable([suitable])
+  }, [viewParams])
 
   const [recipes, setRecipes] = useState<RecipeCardData[] | null>(null)
   const [total, setTotal] = useState(0)

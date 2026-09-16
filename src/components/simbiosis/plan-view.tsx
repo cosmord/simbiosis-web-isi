@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  Bookmark,
+  BookmarkCheck,
   CalendarDays,
   Check,
   ClipboardCopy,
   Cookie,
   Copy,
   Download,
+  LayoutTemplate,
   Loader2,
   Moon,
   Plus,
@@ -25,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -32,6 +36,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -56,6 +61,7 @@ import {
   type PlanItemData,
   type PlanRecipeSummary,
   type PlanSlot,
+  type PlanTemplateData,
   type RecipeCardData,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -100,6 +106,15 @@ export function PlanView() {
   const [clearOpen, setClearOpen] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [copySource, setCopySource] = useState<number | null>(null)
+  // Plantillas de menú: guardar el plan actual y recuperar planes guardados
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [templates, setTemplates] = useState<PlanTemplateData[] | null>(null)
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [applyingId, setApplyingId] = useState<string | null>(null)
+  const [confirmApply, setConfirmApply] = useState<PlanTemplateData | null>(null)
   // Día actual (0 = lunes … 6 = domingo). Se resuelve tras montar para evitar
   // discrepancias de hidratación entre servidor y cliente.
   const [today, setToday] = useState<number | null>(null)
@@ -231,6 +246,83 @@ export function PlanView() {
     }
   }
 
+  /* ------------------------- Plantillas de menú ------------------------- */
+
+  const loadTemplates = useCallback(async () => {
+    setLoadingTemplates(true)
+    try {
+      const d = await api<{ templates: PlanTemplateData[] }>('/api/plan/templates')
+      setTemplates(d.templates)
+    } catch (err) {
+      setTemplates([])
+      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar tus plantillas.')
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (templatesOpen) void loadTemplates()
+  }, [templatesOpen, loadTemplates])
+
+  async function saveTemplate() {
+    const name = templateName.trim()
+    if (!name) {
+      toast.warning('Escribe un nombre para la plantilla (p. ej. «Semana suave»).')
+      return
+    }
+    setSavingTemplate(true)
+    try {
+      const d = await api<{ template: PlanTemplateData; updated: boolean }>(
+        '/api/plan/templates',
+        jsonBody('POST', { name })
+      )
+      toast.success(
+        d.updated
+          ? `Plantilla «${d.template.name}» actualizada con tu plan actual.`
+          : `Plan guardado como plantilla «${d.template.name}».`
+      )
+      setSaveOpen(false)
+      setTemplateName('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la plantilla.')
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  /** Aplica la plantilla: sustituye el plan actual por su contenido guardado. */
+  async function applyTemplate(t: PlanTemplateData) {
+    setConfirmApply(null)
+    setApplyingId(t.id)
+    try {
+      const d = await api<{ applied: number; removed: number; items: PlanItemData[] }>(
+        `/api/plan/templates/${t.id}/apply`,
+        jsonBody('POST', {})
+      )
+      setItems(d.items)
+      setChecked(new Set())
+      setTemplatesOpen(false)
+      toast.success(
+        `Plantilla «${t.name}» aplicada: ${d.applied} ${d.applied === 1 ? 'receta planificada' : 'recetas planificadas'}.`
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo aplicar la plantilla.')
+    } finally {
+      setApplyingId(null)
+    }
+  }
+
+  async function deleteTemplate(t: PlanTemplateData) {
+    try {
+      await api(`/api/plan/templates/${t.id}`, jsonBody('DELETE', {}))
+      setTemplates((prev) => (prev ?? []).filter((x) => x.id !== t.id))
+      toast.success(`Plantilla «${t.name}» eliminada.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la plantilla.')
+    }
+  }
+
   if (!user) {
     return (
       <EmptyState
@@ -272,7 +364,18 @@ export function PlanView() {
           </p>
         </div>
         {plannedCount > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                setTemplateName('')
+                setSaveOpen(true)
+              }}
+            >
+              <Bookmark aria-hidden="true" className="size-4" />
+              Guardar como plantilla
+            </Button>
             <Button variant="outline" className="min-h-11" onClick={() => window.print()}>
               <Printer aria-hidden="true" className="size-4" />
               Imprimir plan
@@ -304,6 +407,10 @@ export function PlanView() {
           </AlertDialog>
           </div>
         )}
+        <Button variant="outline" className="min-h-11" onClick={() => setTemplatesOpen(true)}>
+          <LayoutTemplate aria-hidden="true" className="size-4 text-primary" />
+          Mis plantillas
+        </Button>
       </div>
 
       <div className="print-plan print-plan-layout grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
@@ -551,6 +658,169 @@ export function PlanView() {
         onClose={() => setPicker(null)}
         onPick={(recipe) => void assign(recipe)}
       />
+
+      {/* Guardar plan como plantilla */}
+      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookmarkCheck aria-hidden="true" className="size-5 text-primary" />
+              Guardar como plantilla
+            </DialogTitle>
+            <DialogDescription>
+              Se guardará tu plan semanal actual ({plannedCount}{' '}
+              {plannedCount === 1 ? 'receta' : 'recetas'}) con el nombre que elijas. Podrás
+              recuperarlo en cualquier momento desde «Mis plantillas».
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="template-name">Nombre de la plantilla</Label>
+            <Input
+              id="template-name"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              placeholder="Ej.: Semana suave en brote"
+              maxLength={60}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !savingTemplate) void saveTemplate()
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Si ya existe una plantilla con ese nombre, se actualizará con tu plan actual.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveOpen(false)} disabled={savingTemplate}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void saveTemplate()} disabled={savingTemplate}>
+              {savingTemplate ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Bookmark aria-hidden="true" className="size-4" />}
+              Guardar plantilla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Listado y aplicación de plantillas */}
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutTemplate aria-hidden="true" className="size-5 text-primary" />
+              Mis plantillas de menú
+            </DialogTitle>
+            <DialogDescription>
+              Aplica una plantilla para rellenar tu semana al instante. Sustituirá el plan
+              actual si lo tienes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+            {loadingTemplates ? (
+              <div className="space-y-2 py-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : (templates ?? []).length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center">
+                <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <LayoutTemplate aria-hidden="true" className="size-6" />
+                </span>
+                <p className="text-sm font-medium">Aún no tienes plantillas</p>
+                <p className="max-w-xs text-xs text-muted-foreground">
+                  Organiza una semana que te siente bien y guárdala con «Guardar como plantilla»
+                  para reutilizarla cuando quieras.
+                </p>
+              </div>
+            ) : (
+              (templates ?? []).map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-3 rounded-xl border p-3 transition-colors hover:border-primary/40"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <UtensilsCrossed aria-hidden="true" className="size-4.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'} · guardada el{' '}
+                      {new Date(t.createdAt).toLocaleDateString('es-ES', {
+                        day: 'numeric',
+                        month: 'short',
+                      })}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="min-h-9"
+                    disabled={applyingId === t.id}
+                    onClick={() =>
+                      plannedCount > 0 ? setConfirmApply(t) : void applyTemplate(t)
+                    }
+                  >
+                    {applyingId === t.id ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    Aplicar
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 shrink-0 text-muted-foreground hover:text-destructive"
+                        aria-label={`Eliminar la plantilla ${t.name}`}
+                      >
+                        <Trash2 aria-hidden="true" className="size-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar la plantilla «{t.name}»?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tu plan semanal actual no se verá afectado. Esta acción no se puede deshacer.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                          onClick={() => void deleteTemplate(t)}
+                        >
+                          Sí, eliminar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmación al aplicar con un plan en curso */}
+      <AlertDialog open={!!confirmApply} onOpenChange={(o) => !o && setConfirmApply(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Aplicar la plantilla «{confirmApply?.name}»?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tu plan semanal actual ({plannedCount}{' '}
+              {plannedCount === 1 ? 'receta' : 'recetas'}) se sustituirá por el contenido de la
+              plantilla ({confirmApply?.recipeCount ?? 0}). Podrás rehacerlo, pero esta acción no
+              guarda el plan actual.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmApply && void applyTemplate(confirmApply)}>
+              Sí, aplicar plantilla
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

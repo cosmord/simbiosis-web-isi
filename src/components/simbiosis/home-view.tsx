@@ -10,6 +10,7 @@ import {
   CalendarDays,
   CalendarHeart,
   ChefHat,
+  Clock,
   Cookie,
   Eye,
   HeartPulse,
@@ -18,8 +19,10 @@ import {
   Plus,
   Search,
   Sparkles,
+  Star,
   Sun,
   Sunrise,
+  Users,
   UtensilsCrossed,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,13 +39,14 @@ import { useSimbiosis } from '@/lib/store'
 import {
   PUBLICATION_CATEGORIES,
   PLAN_SLOTS,
+  ROLE_LABELS,
   type PlanItemData,
   type PlanSlot,
   type PublicationCardData,
   type RecipeCardData,
   type ThreadCardData,
 } from '@/lib/types'
-import { relativeTime } from '@/lib/format'
+import { numEs, relativeTime } from '@/lib/format'
 
 const SLOT_ICONS: Record<PlanSlot, typeof Sunrise> = {
   BREAKFAST: Sunrise,
@@ -87,6 +91,8 @@ export function HomeView() {
   const [recipes, setRecipes] = useState<RecipeCardData[] | null>(null)
   const [publications, setPublications] = useState<PublicationCardData[] | null>(null)
   const [threads, setThreads] = useState<ThreadCardData[] | null>(null)
+  // Receta destacada de la semana (rotación semanal determinista en el backend)
+  const [featured, setFeatured] = useState<RecipeCardData | null>(null)
 
   useEffect(() => {
     let active = true
@@ -99,6 +105,9 @@ export function HomeView() {
     api<{ threads: ThreadCardData[] }>('/api/forum/threads')
       .then((d) => active && setThreads(d.threads.slice(0, 4)))
       .catch(() => active && setThreads([]))
+    api<{ recipe: RecipeCardData | null }>('/api/recipes/featured')
+      .then((d) => active && setFeatured(d.recipe))
+      .catch(() => active && setFeatured(null))
     return () => {
       active = false
     }
@@ -181,6 +190,9 @@ export function HomeView() {
 
       {/* Estadísticas y criterios de éxito */}
       <StatsBanner />
+
+      {/* Receta destacada de la semana */}
+      <FeaturedRecipeCard featured={featured} onOpen={(id) => navigate('recipeDetail', { id })} />
 
       {/* Menú de hoy (solo usuarios con sesión) */}
       <TodayMenuCard />
@@ -542,5 +554,146 @@ function SectionHeader({
         </Button>
       )}
     </div>
+  )
+}
+
+/* ------------------------- Receta destacada de la semana ------------------------- */
+
+/** Gran tarjeta con la receta destacada de la semana (rotación semanal en el backend). */
+function FeaturedRecipeCard({
+  featured,
+  onOpen,
+}: {
+  featured: RecipeCardData | null
+  onOpen: (id: string) => void
+}) {
+  if (!featured) return null
+
+  return (
+    <section aria-labelledby="featured-recipe-title">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        whileHover={{ y: -3 }}
+      >
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpen(featured.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onOpen(featured.id)
+            }
+          }}
+          aria-label={`Ver la receta destacada de la semana: ${featured.title}`}
+          className="group cursor-pointer overflow-hidden py-0 transition-all hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <div className="grid sm:grid-cols-[260px_1fr] lg:grid-cols-[320px_1fr]">
+            {/* Imagen */}
+            <div className="relative h-44 overflow-hidden sm:h-full sm:min-h-56">
+              <Image
+                src={featured.image || '/images/recipes/pure-zanahoria.png'}
+                alt={`Foto de ${featured.title}`}
+                fill
+                sizes="(max-width: 640px) 100vw, 320px"
+                className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-stone-950/55 via-transparent to-transparent sm:bg-gradient-to-r sm:from-transparent sm:to-stone-950/10" />
+              <Badge className="absolute left-3 top-3 gap-1 border-transparent bg-amber-400 text-amber-950 shadow-md">
+                <Sparkles aria-hidden="true" className="size-3" />
+                Receta de la semana
+              </Badge>
+            </div>
+
+            {/* Contenido */}
+            <div className="flex flex-col gap-3 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2
+                    id="featured-recipe-title"
+                    className="truncate text-lg font-bold tracking-tight transition-colors group-hover:text-primary sm:text-xl"
+                  >
+                    {featured.title}
+                  </h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    {featured.author && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <UserAvatar
+                          name={featured.author.name}
+                          role={featured.author.role}
+                          className="size-5 border-0 text-[9px]"
+                        />
+                        {featured.author.name}
+                      </span>
+                    )}
+                    {featured.author && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>{ROLE_LABELS[featured.author.role]}</span>
+                      </>
+                    )}
+                    <span aria-hidden="true">·</span>
+                    <span>{relativeTime(featured.createdAt)}</span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="shrink-0 bg-primary/5 font-medium text-primary">
+                  {featured.category}
+                </Badge>
+              </div>
+
+              <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                {featured.description}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {featured.tags.slice(0, 3).map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="bg-accent/70 font-normal text-accent-foreground"
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+
+              <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-3">
+                {featured.ratingCount > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold">
+                    <Star aria-hidden="true" className="size-4 fill-amber-400 text-amber-400" />
+                    {numEs(featured.avgRating)}
+                    <span className="font-normal text-muted-foreground">
+                      ({featured.ratingCount}{' '}
+                      {featured.ratingCount === 1 ? 'valoración' : 'valoraciones'})
+                    </span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                    <Star aria-hidden="true" className="size-4" /> Sin valoraciones aún
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock aria-hidden="true" className="size-3.5" />
+                  {featured.prepTime} min
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Users aria-hidden="true" className="size-3.5" />
+                  {featured.servings} {featured.servings === 1 ? 'ración' : 'raciones'}
+                </span>
+                <span className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                  Ver receta
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="size-4 transition-transform group-hover:translate-x-0.5"
+                  />
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+    </section>
   )
 }

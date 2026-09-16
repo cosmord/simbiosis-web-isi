@@ -34,6 +34,7 @@ model User {
   healthEntries HealthEntry[]
   favorites     Favorite[]
   mealPlan      MealPlanItem[]
+  planTemplates PlanTemplate[]
   notifications Notification[]
   emailsReceived EmailLog[] @relation("EmailRecipient")
   reportsMade   Report[] @relation("Reporter")
@@ -85,6 +86,20 @@ model MealPlanItem {
   createdAt DateTime @default(now())
 
   @@unique([userId, day, slot])
+}
+
+// Plantillas de menú: guardan un plan semanal reutilizable para recuperarlo después.
+// days se guarda como JSON string [{ day: 0-6, slot, recipeId }] (SQLite no soporta listas).
+model PlanTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  days      String   @default("[]")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
 }
 
 model Rating {
