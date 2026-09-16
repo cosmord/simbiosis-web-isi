@@ -7,6 +7,8 @@ import {
   BookmarkCheck,
   CalendarDays,
   Check,
+  CheckCircle2,
+  ChefHat,
   ClipboardCopy,
   Cookie,
   Copy,
@@ -17,6 +19,7 @@ import {
   Plus,
   Printer,
   ShoppingBasket,
+  Sparkles,
   Sun,
   Sunrise,
   Trash2,
@@ -61,6 +64,8 @@ import {
   type PlanItemData,
   type PlanRecipeSummary,
   type PlanSlot,
+  type PlanSuggestionsData,
+  type PlanSuggestion,
   type PlanTemplateData,
   type RecipeCardData,
 } from '@/lib/types'
@@ -148,8 +153,35 @@ export function PlanView() {
 
   const shoppingList = useMemo(() => buildShoppingList(items ?? []), [items])
 
+  /** Nº de comidas ya cocinadas esta semana. */
+  const cookedCount = useMemo(() => (items ?? []).filter((it) => it.done).length, [items])
+
   function itemAt(day: number, slot: PlanSlot): PlanItemData | undefined {
     return items?.find((it) => it.day === day && it.slot === slot)
+  }
+
+  /** Marca o desmarca una comida como «cocinada». */
+  async function toggleDone(item: PlanItemData) {
+    const next = !item.done
+    // Actualización optimista para respuesta inmediata.
+    setItems((prev) =>
+      (prev ?? []).map((it) => (it.id === item.id ? { ...it, done: next } : it))
+    )
+    try {
+      await api<{ item: { id: string; done: boolean } }>(
+        `/api/plan/${item.id}`,
+        jsonBody('PATCH', { done: next })
+      )
+      if (next) {
+        toast.success(`«${item.recipe.title}» marcada como cocinada. ¡Buen provecho!`)
+      }
+    } catch (err) {
+      // Revertir si falla.
+      setItems((prev) =>
+        (prev ?? []).map((it) => (it.id === item.id ? { ...it, done: item.done } : it))
+      )
+      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar la comida.')
+    }
   }
 
   async function assign(recipe: PlanRecipeSummary | RecipeCardData) {
@@ -413,6 +445,38 @@ export function PlanView() {
         </Button>
       </div>
 
+      {/* Progreso de comidas cocinadas esta semana */}
+      {plannedCount > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-4 py-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+            <ChefHat aria-hidden="true" className="size-4.5" />
+          </span>
+          <div className="min-w-40 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold">
+                Comidas cocinadas esta semana
+              </p>
+              <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {cookedCount} de {plannedCount}
+              </p>
+            </div>
+            <div
+              role="progressbar"
+              aria-valuenow={cookedCount}
+              aria-valuemin={0}
+              aria-valuemax={plannedCount}
+              aria-label={`Comidas cocinadas: ${cookedCount} de ${plannedCount}`}
+              className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-emerald-500/15"
+            >
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500 ease-out"
+                style={{ width: `${Math.round((cookedCount / plannedCount) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="print-plan print-plan-layout grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
         {/* Rejilla de días */}
         <div className="print-plan-grid grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
@@ -426,6 +490,7 @@ export function PlanView() {
           {PLAN_DAY_NAMES.map((dayName, day) => {
             const dayItems = PLAN_SLOTS.map((slot) => ({ slot, item: itemAt(day, slot.value) }))
             const filled = dayItems.filter((d) => d.item).length
+            const dayCooked = dayItems.filter((d) => d.item?.done).length
             return (
               <motion.div
                 key={dayName}
@@ -451,6 +516,16 @@ export function PlanView() {
                       )}
                     </CardTitle>
                     <div className="flex items-center gap-1">
+                      {dayCooked > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="gap-0.5 border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0 text-[10px] text-emerald-700 dark:text-emerald-400"
+                          title={`${dayCooked} ${dayCooked === 1 ? 'comida cocinada' : 'comidas cocinadas'} el ${dayName.toLowerCase()}`}
+                        >
+                          <Check aria-hidden="true" className="size-2.5" />
+                          {dayCooked}
+                        </Badge>
+                      )}
                       <Badge
                         variant="outline"
                         className={cn(
@@ -508,20 +583,59 @@ export function PlanView() {
                     {dayItems.map(({ slot: slotDef, item }) => {
                       const Icon = SLOT_ICONS[slotDef.icon]
                       const slotLabel = PLAN_SLOTS.find((s) => s.value === slotDef.value)?.label ?? ''
+                      const isDone = item?.done ?? false
                       return (
                         <div
                           key={slotDef.value}
-                          className="flex items-center gap-2 rounded-lg border border-dashed px-2 py-1.5"
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg border border-dashed px-2 py-1.5 transition-colors duration-200',
+                            isDone
+                              ? 'border-solid border-emerald-500/30 bg-emerald-500/[0.07]'
+                              : item && 'hover:border-primary/30 hover:bg-accent/40'
+                          )}
                         >
-                          <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                          <Icon
+                            aria-hidden="true"
+                            className={cn(
+                              'size-3.5 shrink-0 transition-colors',
+                              isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+                            )}
+                          />
                           <span className="w-16 shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                             {slotLabel}
                           </span>
                           {item ? (
-                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <div className="flex min-w-0 flex-1 items-center gap-1">
                               <button
                                 type="button"
-                                className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:text-primary hover:underline"
+                                className="shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring print:hidden"
+                                onClick={() => void toggleDone(item)}
+                                aria-pressed={isDone}
+                                aria-label={
+                                  isDone
+                                    ? `Desmarcar ${item.recipe.title} como cocinada`
+                                    : `Marcar ${item.recipe.title} como cocinada`
+                                }
+                                title={isDone ? 'Cocinada — clic para desmarcar' : 'Marcar como cocinada'}
+                              >
+                                <CheckCircle2
+                                  aria-hidden="true"
+                                  className={cn(
+                                    'size-4.5 transition-all duration-200',
+                                    isDone
+                                      ? 'fill-emerald-500 text-emerald-500 drop-shadow-sm'
+                                      : 'text-muted-foreground/50 hover:scale-110 hover:text-emerald-500'
+                                  )}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                className={cn(
+                                  'min-w-0 flex-1 truncate rounded text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring print:text-inherit',
+                                  isDone
+                                    ? 'text-muted-foreground line-through decoration-emerald-500/60'
+                                    : 'hover:text-primary hover:underline'
+                                )}
                                 onClick={() => navigate('recipeDetail', { id: item.recipe.id })}
                                 aria-label={`Ver receta ${item.recipe.title}`}
                               >
@@ -838,6 +952,29 @@ function RecipePickerDialog({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<PlanRecipeSummary[] | null>(null)
   const [loading, setLoading] = useState(false)
+  // Sugerencias inteligentes según la fase del diario y la franja elegida.
+  const [sug, setSug] = useState<PlanSuggestionsData | null>(null)
+  const [sugLoading, setSugLoading] = useState(false)
+
+  const slot = picker?.slot ?? null
+
+  // Carga de sugerencias al abrir el diálogo (una por franja abierta).
+  useEffect(() => {
+    if (!slot) return
+    let active = true
+    const t = setTimeout(() => {
+      setSug(null)
+      setSugLoading(true)
+      api<PlanSuggestionsData>(`/api/plan/suggestions?slot=${slot}`)
+        .then((d) => active && setSug(d))
+        .catch(() => active && setSug(null))
+        .finally(() => active && setSugLoading(false))
+    }, 0)
+    return () => {
+      active = false
+      clearTimeout(t)
+    }
+  }, [slot])
 
   useEffect(() => {
     if (!picker) return
@@ -874,11 +1011,21 @@ function RecipePickerDialog({
   function handleClose() {
     setQuery('')
     setResults(null)
+    setSug(null)
     onClose()
   }
 
   const slotLabel = picker ? PLAN_SLOTS.find((s) => s.value === picker.slot)?.label : ''
   const dayLabel = picker ? PLAN_DAY_NAMES[picker.day] : ''
+
+  const phaseBadgeCls =
+    sug?.phase === 'BROTE_ACTIVO'
+      ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400'
+      : sug?.phase === 'BROTE_LEVE'
+        ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+        : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+
+  const topSuggestions = (sug?.suggestions ?? []).slice(0, 4)
 
   return (
     <Dialog open={!!picker} onOpenChange={(open) => !open && handleClose()}>
@@ -896,6 +1043,91 @@ function RecipePickerDialog({
           aria-label="Buscar recetas para el plan"
         />
         <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+          {/* Sugerencias inteligentes (solo con la búsqueda vacía) */}
+          {query.trim() === '' && (
+            <section aria-label="Sugerencias para este hueco del plan" className="pb-1">
+              {sugLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2.5 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+                  Buscando sugerencias para tu fase…
+                </div>
+              ) : topSuggestions.length > 0 ? (
+                <div className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/[0.06] to-transparent p-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5 px-0.5 pb-2">
+                    <Sparkles aria-hidden="true" className="size-3.5 text-primary" />
+                    <p className="text-xs font-semibold">Sugerencias para {slotLabel?.toLowerCase()}</p>
+                    {sug?.phaseLabel ? (
+                      <Badge
+                        variant="outline"
+                        className={cn('px-1.5 py-0 text-[10px] font-semibold', phaseBadgeCls)}
+                        title="Fase inferida del último registro de tu diario de salud"
+                      >
+                        {sug.phaseLabel}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+                        Sin datos del diario
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    {topSuggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-lg border bg-background/80 p-2 text-left outline-none transition-all hover:border-primary/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => onPick(s)}
+                        aria-label={`Añadir ${s.title} al plan (sugerencia)`}
+                      >
+                        <span className="relative size-11 shrink-0 overflow-hidden rounded-lg">
+                          <ImageWithFallback src={s.image} alt="" sizes="44px" icon="none" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{s.title}</span>
+                          <span className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                            {s.matchesPhase && (
+                              <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                                <Check aria-hidden="true" className="size-3" />
+                                Apta para tu fase
+                              </span>
+                            )}
+                            {s.matchesCategory && (
+                              <span>· {s.category}</span>
+                            )}
+                            <span>· {s.prepTime} min</span>
+                            {s.ratingCount > 0 && (
+                              <span>· ★ {s.avgRating.toLocaleString('es-ES')} ({s.ratingCount})</span>
+                            )}
+                          </span>
+                        </span>
+                        <Plus aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                      </button>
+                    ))}
+                  </div>
+                  {sug && !sug.hasHealthData && (
+                    <p className="px-0.5 pt-1.5 text-[11px] text-muted-foreground">
+                      Registra síntomas en tu diario y ajustaremos estas sugerencias a tu fase.
+                    </p>
+                  )}
+                </div>
+              ) : sug && !sugLoading ? (
+                <p className="flex items-center gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+                  <Sparkles aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+                  {sug.hasHealthData
+                    ? 'Ya tienes planificadas las recetas que mejor encajan con tu fase. Prueba la búsqueda.'
+                    : 'Sin sugerencias por ahora: registra tu fase en el diario de salud para recibirlas.'}
+                </p>
+              ) : null}
+            </section>
+          )}
+
+          {/* Separador entre sugerencias y búsqueda */}
+          {query.trim() === '' && topSuggestions.length > 0 && (
+            <p className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Todas las recetas
+            </p>
+          )}
+
           {results === null ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />

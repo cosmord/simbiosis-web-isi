@@ -79,6 +79,7 @@ model MealPlanItem {
   id        String   @id @default(cuid())
   day       Int // 0..6
   slot      String
+  done      Boolean  @default(false) // «cocinada»: el usuario la marca cuando la prepara
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   recipeId  String

@@ -9,6 +9,7 @@ import {
   BookOpenCheck,
   CalendarDays,
   CalendarHeart,
+  CheckCircle2,
   ChefHat,
   Clock,
   Cookie,
@@ -47,6 +48,7 @@ import {
   type ThreadCardData,
 } from '@/lib/types'
 import { numEs, relativeTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 const SLOT_ICONS: Record<PlanSlot, typeof Sunrise> = {
   BREAKFAST: Sunrise,
@@ -480,7 +482,20 @@ function TodayMenuCard() {
                         <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                           {label}
                         </span>
-                        <span className="block truncate text-sm font-medium">{item.recipe.title}</span>
+                        <span
+                          className={cn(
+                            'block truncate text-sm font-medium',
+                            item.done && 'text-muted-foreground line-through decoration-emerald-500/60'
+                          )}
+                        >
+                          {item.recipe.title}
+                        </span>
+                        {item.done && (
+                          <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 aria-hidden="true" className="size-3" />
+                            Cocinada
+                          </span>
+                        )}
                       </span>
                     </button>
                   ) : (

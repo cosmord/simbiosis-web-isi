@@ -364,7 +364,40 @@ export interface PlanItemData {
   id: string
   day: number
   slot: PlanSlot
+  done?: boolean
   recipe: PlanRecipeSummary
+}
+
+/* ------------------ Sugerencias para el planificador --------------------- */
+
+export interface PlanSuggestion {
+  id: string
+  title: string
+  image: string
+  category: string
+  suitableFor: string[]
+  tags: string[]
+  ingredients: string[]
+  prepTime: number
+  servings: number
+  author: RecipeAuthor
+  avgRating: number
+  ratingCount: number
+  favoritesCount: number
+  matchesPhase: boolean
+  matchesCategory: boolean
+  inPlan: boolean
+  score: number
+}
+
+export interface PlanSuggestionsData {
+  phase: 'REMISION' | 'BROTE_LEVE' | 'BROTE_ACTIVO' | null
+  phaseLabel: string | null
+  hasHealthData: boolean
+  slot: PlanSlot
+  categories: string[]
+  suggestions: PlanSuggestion[]
+  totalCandidates: number
 }
 
 /* ---------------------- Plantillas de menú ------------------------------ */

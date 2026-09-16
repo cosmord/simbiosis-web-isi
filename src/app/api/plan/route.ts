@@ -48,6 +48,7 @@ export async function GET() {
       id: it.id,
       day: it.day,
       slot: it.slot,
+      done: it.done,
       recipe: recipeSummary(it.recipe),
     })),
   })
@@ -78,7 +79,8 @@ export async function PUT(req: Request) {
   const item = await db.mealPlanItem.upsert({
     where: { userId_day_slot: { userId: auth.user.id, day, slot } },
     create: { userId: auth.user.id, day, slot, recipeId },
-    update: { recipeId },
+    // Al sustituir la receta, el estado «cocinada» se reinicia (la nueva no se ha cocinado).
+    update: { recipeId, done: false },
     include: {
       recipe: {
         include: { author: { select: { id: true, name: true, role: true } } },
@@ -91,6 +93,7 @@ export async function PUT(req: Request) {
       id: item.id,
       day: item.day,
       slot: item.slot,
+      done: item.done,
       recipe: recipeSummary(item.recipe),
     },
     dayName: DAY_NAMES[day],
