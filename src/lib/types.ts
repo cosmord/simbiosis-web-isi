@@ -394,6 +394,34 @@ export interface NotificationsResponse {
   unread: number
 }
 
+/* ------------------------- Correos y estadísticas ------------------------ */
+
+export type EmailKind = 'ACCOUNT_RECEIVED' | 'ACCOUNT_APPROVED' | 'ACCOUNT_SUSPENDED' | 'CONTENT_REMOVED'
+
+export interface EmailLogData {
+  id: string
+  toEmail: string
+  toUser: { id: string; name: string; role: Role } | null
+  subject: string
+  body: string
+  kind: EmailKind
+  createdAt: string
+}
+
+export interface CoordinatorStatsData {
+  totals: {
+    users: number
+    recipes: number
+    threads: number
+    publications: number
+    openReports: number
+    resolvedReports: number
+  }
+  usersByRole: Record<string, number>
+  usersByStatus: Record<string, number>
+  activity: { date: string; label: string; users: number; recipes: number; threads: number }[]
+}
+
 /* --------------------------- Perfil público ----------------------------- */
 
 export interface PublicProfileData {

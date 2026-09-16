@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { ChefHat, FilterX, Search, UtensilsCrossed } from 'lucide-react'
+import { ChefHat, FilterX, Loader2, Search, UtensilsCrossed } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -38,7 +38,9 @@ const ORIGINS = [
   { value: 'COMMUNITY', label: 'Comunidad' },
 ]
 
-/** Listado de recetas con búsqueda, filtros combinables y ordenación. */
+const PAGE_SIZE = 8
+
+/** Listado de recetas con búsqueda, filtros combinables, ordenación y "Cargar más". */
 export function RecipesView() {
   const { user, navigate, setAuthOpen, refreshKey } = useSimbiosis()
 
@@ -51,7 +53,10 @@ export function RecipesView() {
   const [selectedSuitable, setSelectedSuitable] = useState<string[]>([])
 
   const [recipes, setRecipes] = useState<RecipeCardData[] | null>(null)
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Búsqueda con debounce de 300 ms
@@ -63,28 +68,68 @@ export function RecipesView() {
     }
   }, [query])
 
+  // Filtros combinables en cliente: si están activos se pide todo de una vez
+  const clientFiltering = selectedTags.length > 0 || selectedSuitable.length > 0
+
+  const buildParams = useCallback(
+    (offset: number) => {
+      const params = new URLSearchParams()
+      if (debouncedQuery) params.set('q', debouncedQuery)
+      if (category !== 'ALL') params.set('category', category)
+      if (origin !== 'ALL') params.set('authorRole', origin)
+      params.set('sort', sort)
+      if (!clientFiltering) {
+        params.set('limit', String(PAGE_SIZE))
+        if (offset > 0) params.set('offset', String(offset))
+      }
+      return params
+    },
+    [debouncedQuery, category, origin, sort, clientFiltering]
+  )
+
   // Carga desde la API (los filtros de etiquetas se aplican en cliente: son combinables)
   const load = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (debouncedQuery) params.set('q', debouncedQuery)
-    if (category !== 'ALL') params.set('category', category)
-    if (origin !== 'ALL') params.set('authorRole', origin)
-    params.set('sort', sort)
     try {
-      const d = await api<{ recipes: RecipeCardData[] }>(`/api/recipes?${params.toString()}`)
+      const d = await api<{ recipes: RecipeCardData[]; total: number; hasMore: boolean }>(
+        `/api/recipes?${buildParams(0).toString()}`
+      )
       setRecipes(d.recipes)
+      setTotal(d.total)
+      setHasMore(d.hasMore)
     } catch (err) {
       setRecipes([])
+      setTotal(0)
+      setHasMore(false)
       toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las recetas.')
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery, category, origin, sort, refreshKey])
+  }, [buildParams, refreshKey])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  async function loadMore() {
+    if (loadingMore || !recipes) return
+    setLoadingMore(true)
+    try {
+      const d = await api<{ recipes: RecipeCardData[]; total: number; hasMore: boolean }>(
+        `/api/recipes?${buildParams(recipes.length).toString()}`
+      )
+      setRecipes((prev) => {
+        const existing = new Set((prev ?? []).map((p) => p.id))
+        return [...(prev ?? []), ...d.recipes.filter((r) => !existing.has(r.id))]
+      })
+      setTotal(d.total)
+      setHasMore(d.hasMore)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar más recetas.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!recipes) return null
@@ -265,13 +310,34 @@ export function RecipesView() {
       ) : filtered && filtered.length > 0 ? (
         <>
           <p className="text-sm text-muted-foreground" aria-live="polite">
-            {filtered.length} {filtered.length === 1 ? 'receta encontrada' : 'recetas encontradas'}
+            {clientFiltering
+              ? `${filtered.length} ${filtered.length === 1 ? 'receta encontrada' : 'recetas encontradas'}`
+              : `Mostrando ${filtered.length} de ${total} ${total === 1 ? 'receta' : 'recetas'}`}
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((r) => (
               <RecipeCard key={r.id} recipe={r} />
             ))}
           </div>
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="min-h-11 gap-2 rounded-full px-6 shadow-sm"
+              >
+                {loadingMore ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <ChefHat aria-hidden="true" className="size-4" />
+                )}
+                {loadingMore
+                  ? 'Cargando…'
+                  : `Cargar más recetas (${total - filtered.length} restantes)`}
+              </Button>
+            </div>
+          )}
         </>
       ) : (
         <EmptyState

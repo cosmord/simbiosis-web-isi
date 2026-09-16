@@ -214,3 +214,36 @@ Stage Summary:
 - Cuentas demo (contraseña simbiosis123): coordinador@ / nutricionista@ / medico@ / paciente@ / cuidador@simbiosis.org.
 - Riesgos/notas: (a) el sandbox puede segar el dev server entre llamadas → relanzar con `(setsid nohup bun run dev >> dev.log 2>&1 < /dev/null &)`; (b) tras db:push conviene reiniciar el dev server (cliente Prisma obsoleto); (c) el sondeo de notificaciones es cada 25 s (sin WebSocket; suficiente y simple).
 - Recomendaciones siguiente ronda: paginación/"cargar más" en recetas y foro; emails (simulados) al aprobar cuentas; modo "recordatorios" del plan semanal; estadísticas de administrador más ricas (gráfico de crecimiento); internacionalización (el doc pide decidir idiomas).
+
+---
+Task ID: 8
+Agent: main (cron webDevReview — ronda de revisión continua #3)
+Task: QA de regresión + paginación "Cargar más" + bandeja de correos simulada + panel de resumen del coordinador
+
+Work Log:
+- QA de regresión con agent-browser (home, recetas, foro, login, panel coordinación): cero errores de consola, proyecto estable tras la ronda anterior.
+- NUEVO: paginación "Cargar más" en recetas y foro:
+  - GET /api/recipes y GET /api/forum/threads aceptan `limit` (≤48) y `offset`, aplicados TRAS el ordenado en JS (mantiene la corrección de los sorts RATING/FAVORITES/ACTIVE); devuelven además `total` y `hasMore`. Sin límite si no se piden (compatibilidad con home/perfil/plan).
+  - recipes-view: PAGE_SIZE=8, "Mostrando X de Y recetas", botón redondo "Cargar más recetas (N restantes)" con spinner; si hay filtros de etiquetas/apta-para (client-side) se pide todo de una vez para no romper el filtrado combinable. loadMore deduplica por id.
+  - forum-view: PAGE_SIZE=6, botón "Cargar más hilos (N restantes)" con el mismo patrón.
+  - Verificado en navegador: 8/9 → clic → 9/9 y el botón desaparece; API probada con curl (limit/offset/total/hasMore correctos).
+- NUEVO: bandeja de correos simulados (condición de despliegue del doc v2.2: «envío de mensajes de seguridad y notificaciones por correo electrónico»):
+  - Modelo `EmailLog` (toUserId SetNull para conservar el correo si se borra la cuenta, toEmail, subject, body, kind, index createdAt) + db push + reinicio del dev server.
+  - `src/lib/emails.ts` (sendEmail/sendEmailAsync fire-and-forget, remitente no-responder@simbiosis.org). Eventos: registro → ACCOUNT_RECEIVED ("Hemos recibido tu solicitud"), aprobación → ACCOUNT_APPROVED, suspensión (panel o denuncia) → ACCOUNT_SUSPENDED, retirada de contenido → CONTENT_REMOVED (con el motivo de la nota si existe).
+  - GET /api/coordinator/emails (solo coordinador, últimos 50, con toUser).
+  - Nueva pestaña "Correos enviados" en el panel: tarjetas con asunto, badge por tipo con color, destinatario (nombre + email), fecha relativa y `<details>` desplegable con el cuerpo del mensaje.
+  - Seed: emails de demo en prisma/seed.ts (limpieza con emailLog.deleteMany) + one-off prisma/seed-emails.ts sobre la BD viva (3 correos).
+  - Flujo completo verificado: registro test → ACCOUNT_RECEIVED en bandeja; aprobación → ACCOUNT_APPROVED; usuario de prueba eliminado después (correos retenidos gracias a SetNull).
+- NUEVO: pestaña "Resumen" del panel de coordinación:
+  - GET /api/coordinator/stats: totales (usuarios, recetas, hilos, publicaciones, denuncias abiertas/resueltas), usuarios por rol y por estado, y actividad por día de los últimos 14 días (altas, recetas, hilos) con cubetas por medianoche local.
+  - UI: 6 tarjetas de totales con iconos de colores, gráfico de barras recharts (3 series: usuarios #059669, recetas #d97706, hilos #0d9488) con aria-label y leyenda, badges de usuarios por rol. Skeletons de carga y EmptyState si falla.
+  - Bug corregido durante la verificación: `db.publication.count` no existe (el modelo es HealthPublication) → 500 inicial; corregido a `db.healthPublication.count` y verificado 200.
+- Pulido visual: pestañas del panel con flex-wrap (móvil), tarjetas de stats con iconos en cápsulas de color, botones "Cargar más" redondos con sombra y spinner, tarjetas de correo con badges temáticos.
+- Verificación final: lint sin errores; dev.log sin errores nuevos (los 500 antiguos eran previos al fix); panel de coordinación verificado en escritorio (1440x900) y móvil (390x844) con pestañas envolventes; datos de prueba limpiados (usuario test.email@ borrado).
+
+Stage Summary:
+- Nuevas funcionalidades OPERATIVAS y verificadas: paginación "Cargar más" (recetas y foro), bandeja de correos simulados del sistema (4 tipos de correo), resumen de coordinación con gráfico de actividad de 14 días.
+- Estado BD: 10 usuarios, 9 recetas, 4 hilos, 4 publicaciones, 2 denuncias OPEN de demo, 3 correos de demo + notificaciones de demo. Panel de coordinador ahora con 4 pestañas: Resumen | Denuncias | Gestión de cuentas | Correos enviados.
+- Cuentas demo (contraseña simbiosis123): coordinador@ / nutricionista@ / medico@ / paciente@ / cuidador@simbiosis.org.
+- Riesgos/notas: (a) la paginación ordena en JS sobre el conjunto filtrado (aceptable a escala demo; migrar a ORDER BY en SQL si crece); (b) los correos son simulados (registrados en BD, no se envía nada real); (c) tras db:push recordar reiniciar el dev server.
+- Recomendaciones siguiente ronda: exportación del plan semanal (lista de la compra) a PDF/CSV; recordatorios del plan (generar notificación con el menú del día); moderación: acciones rápidas en línea sin diálogo; i18n multi-idioma; paginar también comentarios/valoraciones del detalle de receta si crece.

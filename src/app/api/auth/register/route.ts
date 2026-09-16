@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { ok, fail } from '@/lib/api-helpers'
 import { hashPassword, publicUser, type Role } from '@/lib/auth'
+import { sendEmailAsync } from '@/lib/emails'
 
 const VALID_ROLES: Role[] = ['PATIENT', 'CAREGIVER', 'NUTRITIONIST', 'DOCTOR']
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -48,6 +49,21 @@ export async function POST(req: NextRequest) {
       bio: cleanBio,
       status: 'PENDING',
     },
+  })
+
+  sendEmailAsync({
+    toUserId: user.id,
+    toEmail: user.email,
+    subject: 'Hemos recibido tu solicitud de registro',
+    body: `Hola ${user.name}:
+
+Gracias por unirte a Simbiosis. Tu solicitud de registro como ${role === 'NUTRITIONIST' || role === 'DOCTOR' ? 'profesional sanitario/a' : role === 'CAREGIVER' ? 'cuidador/a' : 'paciente'} está pendiente de revisión por parte del coordinador.
+
+Recibirás otro correo en cuanto tu cuenta sea revisada. Mientras tanto, puedes consultar las recetas y consejos públicos de la comunidad.
+
+Un saludo,
+El equipo de Simbiosis`,
+    kind: 'ACCOUNT_RECEIVED',
   })
 
   return ok({ user: publicUser(user) }, 201)

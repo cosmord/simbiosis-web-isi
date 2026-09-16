@@ -44,13 +44,18 @@ import {
   type ThreadCategory,
 } from '@/lib/types'
 
-/** Foro de la comunidad: hilos por categoría con orden por actividad. */
+const PAGE_SIZE = 6
+
+/** Foro de la comunidad: hilos por categoría con orden por actividad y "Cargar más". */
 export function ForumView() {
   const { user, navigate, setAuthOpen, refreshKey } = useSimbiosis()
   const [category, setCategory] = useState<string>('ALL')
   const [sort, setSort] = useState('RECENT')
   const [threads, setThreads] = useState<ThreadCardData[] | null>(null)
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
@@ -61,13 +66,20 @@ export function ForumView() {
   useEffect(() => {
     let active = true
     setLoading(true)
-    api<{ threads: ThreadCardData[] }>(
-      `/api/forum/threads?category=${category}&sort=${sort}`
+    api<{ threads: ThreadCardData[]; total: number; hasMore: boolean }>(
+      `/api/forum/threads?category=${category}&sort=${sort}&limit=${PAGE_SIZE}`
     )
-      .then((d) => active && setThreads(d.threads))
+      .then((d) => {
+        if (!active) return
+        setThreads(d.threads)
+        setTotal(d.total)
+        setHasMore(d.hasMore)
+      })
       .catch((err) => {
         if (!active) return
         setThreads([])
+        setTotal(0)
+        setHasMore(false)
         toast.error(err instanceof Error ? err.message : 'No se pudo cargar el foro.')
       })
       .finally(() => active && setLoading(false))
@@ -75,6 +87,26 @@ export function ForumView() {
       active = false
     }
   }, [category, sort, refreshKey])
+
+  async function loadMore() {
+    if (loadingMore || !threads) return
+    setLoadingMore(true)
+    try {
+      const d = await api<{ threads: ThreadCardData[]; total: number; hasMore: boolean }>(
+        `/api/forum/threads?category=${category}&sort=${sort}&limit=${PAGE_SIZE}&offset=${threads.length}`
+      )
+      setThreads((prev) => {
+        const existing = new Set((prev ?? []).map((p) => p.id))
+        return [...(prev ?? []), ...d.threads.filter((t) => !existing.has(t.id))]
+      })
+      setTotal(d.total)
+      setHasMore(d.hasMore)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar más hilos.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   function openNewThread() {
     if (!user) {
@@ -210,6 +242,25 @@ export function ForumView() {
               </motion.div>
             )
           })}
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="min-h-11 gap-2 rounded-full px-6 shadow-sm"
+              >
+                {loadingMore ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <MessagesSquare aria-hidden="true" className="size-4" />
+                )}
+                {loadingMore
+                  ? 'Cargando…'
+                  : `Cargar más hilos (${total - threads.length} restantes)`}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <EmptyState

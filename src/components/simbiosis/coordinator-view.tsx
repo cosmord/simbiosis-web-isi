@@ -2,11 +2,25 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip as ReTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
   Ban,
+  BookOpenCheck,
   Check,
+  ChefHat,
   CircleAlert,
   Flag,
   Loader2,
+  Mail,
+  MessagesSquare,
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
@@ -59,7 +73,10 @@ import { cn } from '@/lib/utils'
 import {
   REPORT_REASONS,
   REPORT_TARGET_LABELS,
+  ROLE_LABELS,
   type CoordinatorUser,
+  type CoordinatorStatsData,
+  type EmailLogData,
   type ReportData,
   type ReportStatus,
 } from '@/lib/types'
@@ -112,8 +129,12 @@ export function CoordinatorView() {
         </p>
       </div>
 
-      <Tabs defaultValue="reports">
-        <TabsList>
+      <Tabs defaultValue="overview">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 sm:w-auto">
+          <TabsTrigger value="overview" className="min-h-9">
+            <ChefHat aria-hidden="true" className="size-4" />
+            Resumen
+          </TabsTrigger>
           <TabsTrigger value="reports" className="min-h-9">
             <Flag aria-hidden="true" className="size-4" />
             Denuncias
@@ -122,14 +143,222 @@ export function CoordinatorView() {
             <Users aria-hidden="true" className="size-4" />
             Gestión de cuentas
           </TabsTrigger>
+          <TabsTrigger value="emails" className="min-h-9">
+            <Mail aria-hidden="true" className="size-4" />
+            Correos enviados
+          </TabsTrigger>
         </TabsList>
+        <TabsContent value="overview" className="mt-4">
+          <OverviewPanel />
+        </TabsContent>
         <TabsContent value="reports" className="mt-4">
           <ReportsPanel />
         </TabsContent>
         <TabsContent value="users" className="mt-4">
           <UsersPanel />
         </TabsContent>
+        <TabsContent value="emails" className="mt-4">
+          <EmailsPanel />
+        </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+/* -------------------------------- Resumen -------------------------------- */
+
+function OverviewPanel() {
+  const [stats, setStats] = useState<CoordinatorStatsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    api<CoordinatorStatsData>('/api/coordinator/stats')
+      .then((d) => active && setStats(d))
+      .catch(() => active && setStats(null))
+      .finally(() => active && setLoading(false))
+    return () => {
+      active = false
+    }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+      </div>
+    )
+  }
+  if (!stats) {
+    return (
+      <EmptyState
+        icon={ShieldAlert}
+        title="No se pudo cargar el resumen"
+        description="Inténtalo de nuevo recargando la página."
+      />
+    )
+  }
+
+  const totals = [
+    { label: 'Usuarios', value: stats.totals.users, icon: Users, className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
+    { label: 'Recetas', value: stats.totals.recipes, icon: ChefHat, className: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
+    { label: 'Hilos', value: stats.totals.threads, icon: MessagesSquare, className: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300' },
+    { label: 'Publicaciones', value: stats.totals.publications, icon: BookOpenCheck, className: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
+    { label: 'Denuncias abiertas', value: stats.totals.openReports, icon: Flag, className: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' },
+    { label: 'Denuncias resueltas', value: stats.totals.resolvedReports, icon: ShieldCheck, className: 'bg-lime-100 text-lime-700 dark:bg-lime-950 dark:text-lime-300' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {totals.map(({ label, value, icon: Icon, className }) => (
+          <Card key={label}>
+            <CardContent className="flex items-center gap-3 p-4">
+              <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', className)}>
+                <Icon aria-hidden="true" className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xl font-bold leading-none tracking-tight">{value}</p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">{label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardContent className="p-4 sm:p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Actividad de los últimos 14 días
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Altas de cuentas, recetas publicadas e hilos abiertos por día.
+          </p>
+          <div className="mt-4 h-72" role="img" aria-label="Gráfico de actividad de la comunidad en los últimos 14 días">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.activity} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-border" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={1} tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                <ReTooltip
+                  cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                  contentStyle={{ borderRadius: 12, border: '1px solid var(--border)', fontSize: 12 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="users" name="Altas de usuarios" fill="#059669" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="recipes" name="Recetas" fill="#d97706" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="threads" name="Hilos" fill="#0d9488" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 sm:p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Usuarios por rol
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Object.entries(stats.usersByRole).map(([role, count]) => (
+              <Badge key={role} variant="outline" className="gap-1.5 px-2.5 py-1">
+                {ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role}
+                <span className="rounded-full bg-secondary px-1.5 text-xs font-bold">{count}</span>
+              </Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+/* ------------------------- Correos enviados (simulado) ------------------------- */
+
+const EMAIL_KIND_META: Record<string, { label: string; className: string }> = {
+  ACCOUNT_RECEIVED: { label: 'Solicitud recibida', className: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300' },
+  ACCOUNT_APPROVED: { label: 'Cuenta aprobada', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
+  ACCOUNT_SUSPENDED: { label: 'Cuenta suspendida', className: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' },
+  CONTENT_REMOVED: { label: 'Contenido retirado', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+}
+
+function EmailsPanel() {
+  const [emails, setEmails] = useState<EmailLogData[] | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const d = await api<{ emails: EmailLogData[] }>('/api/coordinator/emails')
+      setEmails(d.emails)
+    } catch (err) {
+      setEmails([])
+      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los correos.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Bandeja simulada de salida: la plataforma registra aquí los correos de seguridad y
+        notificaciones que envía a los usuarios (condición de despliegue del documento de
+        visión).
+      </p>
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : emails && emails.length > 0 ? (
+        <div className="space-y-3">
+          {emails.map((e) => {
+            const meta = EMAIL_KIND_META[e.kind] ?? { label: e.kind, className: '' }
+            return (
+              <Card key={e.id}>
+                <CardContent className="space-y-2 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Mail aria-hidden="true" className="size-4 text-primary" />
+                    <span className="text-sm font-semibold">{e.subject}</span>
+                    <Badge className={cn('border-transparent', meta.className)}>{meta.label}</Badge>
+                    <span className="ml-auto text-xs text-muted-foreground">{relativeTime(e.createdAt)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Para: <strong className="font-medium text-foreground/80">{e.toUser?.name ?? e.toEmail}</strong>
+                    {' · '}
+                    {e.toEmail}
+                  </p>
+                  <details className="group">
+                    <summary className="cursor-pointer text-xs font-medium text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      Ver cuerpo del mensaje
+                    </summary>
+                    <p className="mt-2 whitespace-pre-line rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed">
+                      {e.body}
+                    </p>
+                  </details>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          icon={Mail}
+          title="No hay correos enviados todavía"
+          description="Cuando se apruebe o suspenda una cuenta, o se retire contenido, el correo correspondiente se registrará aquí."
+        />
+      )}
     </div>
   )
 }

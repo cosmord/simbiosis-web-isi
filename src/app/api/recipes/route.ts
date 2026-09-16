@@ -83,7 +83,17 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  return ok({ recipes: items })
+  // Paginación (offset/limit) aplicada tras ordenar; sin límite si no se pide.
+  const total = items.length
+  const offsetParam = Number(searchParams.get('offset'))
+  const limitParam = Number(searchParams.get('limit'))
+  const offset = Number.isInteger(offsetParam) && offsetParam > 0 ? offsetParam : 0
+  const limit =
+    Number.isInteger(limitParam) && limitParam > 0 && limitParam <= 48 ? limitParam : null
+  if (offset > 0) items = items.slice(offset)
+  if (limit !== null) items = items.slice(0, limit)
+
+  return ok({ recipes: items, total, hasMore: limit !== null ? offset + items.length < total : false })
 }
 
 // POST /api/recipes — crear receta (requiere autenticación)

@@ -15,6 +15,7 @@ function daysAgo(n: number): Date {
 
 async function main() {
   console.log('🌱 Limpiando base de datos...')
+  await db.emailLog.deleteMany()
   await db.notification.deleteMany()
   await db.report.deleteMany()
   await db.favorite.deleteMany()
@@ -614,6 +615,40 @@ async function main() {
         reporterId: paciente2.id,
         resolvedById: coordinator.id,
         createdAt: daysAgo(5),
+      },
+    ],
+  })
+
+  console.log('📧 Creando correos simulados de ejemplo...')
+  const allUsers = await db.user.findMany({ select: { id: true, email: true, name: true, role: true, status: true } })
+  const byEmail = (mail: string) => allUsers.find((u) => u.email === mail)!
+  const demoUser = byEmail('paciente@simbiosis.org')
+  const demoNutri = byEmail('nutricionista@simbiosis.org')
+  await db.emailLog.createMany({
+    data: [
+      {
+        toUserId: demoUser.id,
+        toEmail: demoUser.email,
+        subject: 'Hemos recibido tu solicitud de registro',
+        body: `Hola ${demoUser.name}:\n\nGracias por unirte a Simbiosis. Tu solicitud de registro como paciente está pendiente de revisión por parte del coordinador.\n\nUn saludo,\nEl equipo de Simbiosis`,
+        kind: 'ACCOUNT_RECEIVED',
+        createdAt: daysAgo(7),
+      },
+      {
+        toUserId: demoUser.id,
+        toEmail: demoUser.email,
+        subject: 'Tu cuenta de Simbiosis ha sido aprobada',
+        body: `Hola ${demoUser.name}:\n\n¡Buenas noticias! El coordinador de Simbiosis ha aprobado tu cuenta. Ya puedes iniciar sesión y participar en la comunidad.\n\nEl equipo de Simbiosis`,
+        kind: 'ACCOUNT_APPROVED',
+        createdAt: daysAgo(6),
+      },
+      {
+        toUserId: demoNutri.id,
+        toEmail: demoNutri.email,
+        subject: 'Tu cuenta de Simbiosis ha sido aprobada',
+        body: `Hola ${demoNutri.name}:\n\n¡Buenas noticias! El coordinador de Simbiosis ha aprobado tu cuenta profesional. Ya puedes publicar recetas validadas y consejos de salud.\n\nEl equipo de Simbiosis`,
+        kind: 'ACCOUNT_APPROVED',
+        createdAt: daysAgo(9),
       },
     ],
   })

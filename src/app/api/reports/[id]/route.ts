@@ -7,6 +7,7 @@ import {
   suspendUserAndClearSessions,
 } from '@/lib/reports'
 import { notifyAsync } from '@/lib/notify'
+import { sendEmailAsync } from '@/lib/emails'
 
 const ACTIONS = ['DISMISS', 'REMOVE_CONTENT', 'SUSPEND_USER'] as const
 type ReportAction = (typeof ACTIONS)[number]
@@ -78,6 +79,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           title: 'Cuenta suspendida',
           body: `Tu cuenta ha sido suspendida tras la revisión de una denuncia.${cleanNote ? ` Motivo: ${cleanNote}` : ''}`,
         })
+        sendEmailAsync({
+          toUserId: targetUser.id,
+          toEmail: targetUser.email,
+          subject: 'Tu cuenta de Simbiosis ha sido suspendida',
+          body: `Hola ${targetUser.name}:
+
+Tu cuenta ha sido suspendida tras la revisión de una denuncia por el coordinador de Simbiosis.${cleanNote ? ` Motivo indicado: ${cleanNote}` : ''}
+
+Si crees que se trata de un error, responde a este correo para que el equipo pueda revisar tu caso.
+
+El equipo de Simbiosis`,
+          kind: 'ACCOUNT_SUSPENDED',
+        })
       }
     } else {
       await removeContent(report.targetType, report.targetId)
@@ -92,6 +106,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           title: 'Contenido retirado',
           body: `${base}${cleanNote ? ` Motivo: ${cleanNote}` : ''}`,
         })
+        const author = await db.user.findUnique({ where: { id: authorId } })
+        if (author) {
+          sendEmailAsync({
+            toUserId: author.id,
+            toEmail: author.email,
+            subject: 'Se ha retirado tu contenido en Simbiosis',
+            body: `Hola ${author.name}:
+
+${base}${cleanNote ? ` Motivo indicado: ${cleanNote}` : ''}
+
+Recuerda las normas de la comunidad: la información de salud debe ser segura y contrastada, y el respeto es imprescindible. Puedes consultar la guía de la comunidad desde la plataforma.
+
+El equipo de Simbiosis`,
+            kind: 'CONTENT_REMOVED',
+          })
+        }
       }
     }
     resolutionText = cleanNote ?? 'Contenido eliminado por el coordinador.'
@@ -115,6 +145,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           type: 'MODERATION',
           title: 'Cuenta suspendida',
           body: `Tu cuenta ha sido suspendida tras la revisión de una denuncia.${cleanNote ? ` Motivo: ${cleanNote}` : ''}`,
+        })
+        sendEmailAsync({
+          toUserId: targetUser.id,
+          toEmail: targetUser.email,
+          subject: 'Tu cuenta de Simbiosis ha sido suspendida',
+          body: `Hola ${targetUser.name}:
+
+Tu cuenta ha sido suspendida tras la revisión de una denuncia por el coordinador de Simbiosis.${cleanNote ? ` Motivo indicado: ${cleanNote}` : ''}
+
+Si crees que se trata de un error, responde a este correo para que el equipo pueda revisar tu caso.
+
+El equipo de Simbiosis`,
+          kind: 'ACCOUNT_SUSPENDED',
         })
       }
     }
