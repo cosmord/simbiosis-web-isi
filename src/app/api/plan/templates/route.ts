@@ -16,6 +16,11 @@ export async function GET() {
   const auth = await requireUser()
   if (auth.error) return auth.error
 
+  const recipes = await db.recipe.findMany({
+    select: { id: true, title: true },
+  })
+  const titleById = new Map(recipes.map((r) => [r.id, r.title]))
+
   const templates = await db.planTemplate.findMany({
     where: { userId: auth.user.id },
     orderBy: { createdAt: 'desc' },
@@ -38,6 +43,13 @@ export async function GET() {
         appliedCount: t.appliedCount,
         recipeCount: days.length,
         createdAt: t.createdAt.toISOString(),
+        // Referencias de recetas para la vista previa/diff antes de aplicar.
+        items: days.map((d) => ({
+          day: d.day,
+          slot: d.slot,
+          recipeId: d.recipeId,
+          recipeTitle: titleById.get(d.recipeId) ?? 'Receta retirada',
+        })),
       }
     }),
   })

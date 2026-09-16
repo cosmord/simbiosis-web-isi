@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  ArrowRight,
   BadgeCheck,
   BellRing,
   Bookmark,
@@ -19,6 +20,7 @@ import {
   LayoutTemplate,
   Loader2,
   Moon,
+  Pencil,
   Plus,
   Printer,
   ShoppingBasket,
@@ -73,6 +75,7 @@ import {
   type PlanSuggestionsData,
   type PlanSuggestion,
   type PlanTemplateData,
+  type PlanTemplateItemRef,
   type RecipeCardData,
   type Role,
 } from '@/lib/types'
@@ -111,6 +114,85 @@ function buildShoppingList(items: PlanItemData[]): ShoppingEntry[] {
   )
 }
 
+/* ------------------- Diff plan actual vs plantilla ---------------------- */
+
+export interface PlanDiffRow {
+  slot: PlanSlot
+  kind: 'kept' | 'replaced' | 'added' | 'lost'
+  currentTitle?: string
+  templateTitle?: string
+}
+
+export interface PlanDiffDay {
+  day: number
+  rows: PlanDiffRow[]
+}
+
+export interface PlanDiffResult {
+  kept: number
+  replaced: number
+  added: number
+  lost: number
+  days: PlanDiffDay[]
+}
+
+/**
+ * Compara el plan semanal actual con el contenido de una plantilla, hueco por
+ * hueco (día + franja): se mantiene (misma receta), se sustituye (otra receta),
+ * hueco nuevo (solo en la plantilla) o se pierde (solo en el plan actual).
+ */
+export function computePlanDiff(
+  current: PlanItemData[],
+  templateItems: PlanTemplateItemRef[]
+): PlanDiffResult {
+  const currentMap = new Map<string, PlanItemData>()
+  for (const it of current) currentMap.set(`${it.day}:${it.slot}`, it)
+  const templateMap = new Map<string, PlanTemplateItemRef>()
+  for (const it of templateItems) templateMap.set(`${it.day}:${it.slot}`, it)
+
+  const daySet = new Set<number>([
+    ...current.map((i) => i.day),
+    ...templateItems.map((i) => i.day),
+  ])
+  const days: PlanDiffDay[] = [...daySet].sort((a, b) => a - b).map((day) => ({ day, rows: [] }))
+
+  const result: PlanDiffResult = { kept: 0, replaced: 0, added: 0, lost: 0, days }
+
+  const allKeys = new Set<string>([...currentMap.keys(), ...templateMap.keys()])
+  for (const key of allKeys) {
+    const [dayStr, slot] = key.split(':')
+    const day = Number(dayStr)
+    const cur = currentMap.get(key)
+    const tpl = templateMap.get(key)
+    let row: PlanDiffRow
+    if (cur && tpl) {
+      if (cur.recipe.id === tpl.recipeId) {
+        row = { slot: slot as PlanSlot, kind: 'kept', currentTitle: cur.recipe.title, templateTitle: tpl.recipeTitle }
+        result.kept += 1
+      } else {
+        row = { slot: slot as PlanSlot, kind: 'replaced', currentTitle: cur.recipe.title, templateTitle: tpl.recipeTitle }
+        result.replaced += 1
+      }
+    } else if (tpl) {
+      row = { slot: slot as PlanSlot, kind: 'added', templateTitle: tpl.recipeTitle }
+      result.added += 1
+    } else {
+      row = { slot: slot as PlanSlot, kind: 'lost', currentTitle: cur?.recipe.title }
+      result.lost += 1
+    }
+    const dayEntry = days.find((d) => d.day === day)
+    if (dayEntry) {
+      dayEntry.rows.push(row)
+      dayEntry.rows.sort(
+        (a, b) =>
+          PLAN_SLOTS.findIndex((s) => s.value === a.slot) -
+          PLAN_SLOTS.findIndex((s) => s.value === b.slot)
+      )
+    }
+  }
+  return result
+}
+
 /** Planificador semanal: organiza recetas en 7 días × 4 franjas y genera la lista de la compra. */
 export function PlanView() {
   const { user, setAuthOpen, navigate, bumpRefresh } = useSimbiosis()
@@ -141,6 +223,11 @@ export function PlanView() {
   // justo cuando se marca una comida como «cocinada».
   const [hasDiaryToday, setHasDiaryToday] = useState<boolean | null>(null)
   const diaryNudgeShown = useRef(false)
+  // Editar una plantilla propia (nombre y descripción)
+  const [editTemplate, setEditTemplate] = useState<PlanTemplateData | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   // Día actual (0 = lunes … 6 = domingo). Se resuelve tras montar para evitar
   // discrepancias de hidratación entre servidor y cliente.
   const [today, setToday] = useState<number | null>(null)
@@ -412,6 +499,45 @@ export function PlanView() {
       toast.success(`Plantilla «${t.name}» eliminada.`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la plantilla.')
+    }
+  }
+
+  /** Abre el diálogo de edición de una plantilla con sus valores actuales. */
+  function openEditTemplate(t: PlanTemplateData) {
+    setEditTemplate(t)
+    setEditName(t.name)
+    setEditDescription(t.description ?? '')
+  }
+
+  /** Guarda los cambios de nombre/descripción de la plantilla (PATCH). */
+  async function saveTemplateEdit() {
+    if (!editTemplate) return
+    setSavingEdit(true)
+    try {
+      const d = await api<{ template: { id: string; name: string; description: string | null; isPublic: boolean } }>(
+        `/api/plan/templates/${editTemplate.id}`,
+        jsonBody('PATCH', { name: editName, description: editDescription })
+      )
+      setTemplates((prev) =>
+        (prev ?? []).map((x) =>
+          x.id === d.template.id
+            ? { ...x, name: d.template.name, description: d.template.description }
+            : x
+        )
+      )
+      setCommunity((prev) =>
+        (prev ?? []).map((x) =>
+          x.id === d.template.id
+            ? { ...x, name: d.template.name, description: d.template.description }
+            : x
+        )
+      )
+      setEditTemplate(null)
+      toast.success(`Plantilla renombrada a «${d.template.name}».`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la plantilla.')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -1077,6 +1203,16 @@ export function PlanView() {
                         ) : null}
                         Aplicar
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 shrink-0 text-muted-foreground hover:text-primary"
+                        aria-label={`Editar el nombre o la descripción de la plantilla ${t.name}`}
+                        title="Editar nombre y descripción"
+                        onClick={() => openEditTemplate(t)}
+                      >
+                        <Pencil aria-hidden="true" className="size-4" />
+                      </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
@@ -1279,26 +1415,183 @@ export function PlanView() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirmación al aplicar con un plan en curso */}
-      <AlertDialog open={!!confirmApply} onOpenChange={(o) => !o && setConfirmApply(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Aplicar la plantilla «{confirmApply?.name}»?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tu plan semanal actual ({plannedCount}{' '}
-              {plannedCount === 1 ? 'receta' : 'recetas'}) se sustituirá por el contenido de la
-              plantilla ({confirmApply?.recipeCount ?? 0}). Podrás rehacerlo, pero esta acción no
-              guarda el plan actual.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => confirmApply && void applyTemplate(confirmApply)}>
+      {/* Vista previa de cambios al aplicar una plantilla con un plan en curso */}
+      <Dialog open={!!confirmApply} onOpenChange={(o) => !o && setConfirmApply(null)}>
+        <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardCopy aria-hidden="true" className="size-5 text-primary" />
+              Revisar cambios antes de aplicar
+            </DialogTitle>
+            <DialogDescription>
+              Así quedaría tu semana al aplicar «{confirmApply?.name}». Tu plan actual (
+              {plannedCount} {plannedCount === 1 ? 'receta' : 'recetas'}) se sustituirá por el
+              contenido de la plantilla ({confirmApply?.recipeCount ?? 0}). Esta acción no guarda
+              el plan actual.
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmApply && items && (() => {
+            const diff = computePlanDiff(items, confirmApply.items ?? [])
+            const chips = [
+              { label: 'Se mantienen', value: diff.kept, className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400' },
+              { label: 'Se sustituyen', value: diff.replaced, className: 'bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400' },
+              { label: 'Nuevos huecos', value: diff.added, className: 'bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-400' },
+              { label: 'Se pierden', value: diff.lost, className: 'bg-rose-500/10 text-rose-700 border-rose-500/30 dark:text-rose-400' },
+            ]
+            return (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-1.5" aria-label="Resumen de cambios">
+                  {chips.map((c) => (
+                    <Badge
+                      key={c.label}
+                      variant="outline"
+                      className={cn('gap-1 px-2 py-1 text-[11px] font-medium', c.className)}
+                    >
+                      {c.value} {c.label.toLowerCase()}
+                    </Badge>
+                  ))}
+                </div>
+
+                <div className="max-h-64 overflow-y-auto rounded-xl border bg-muted/30">
+                  <div className="space-y-3 p-3">
+                    {diff.days.map((d) => (
+                      <div key={d.day}>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {PLAN_DAY_NAMES[d.day]}
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {d.rows.map((r) => {
+                            const slotLabel = PLAN_SLOTS.find((s) => s.value === r.slot)?.label ?? r.slot
+                            const badge =
+                              r.kind === 'kept'
+                                ? { label: 'Se mantiene', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' }
+                                : r.kind === 'replaced'
+                                  ? { label: 'Cambia', className: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' }
+                                  : r.kind === 'added'
+                                    ? { label: 'Nuevo', className: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400' }
+                                    : { label: 'Se pierde', className: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400' }
+                            return (
+                              <li
+                                key={`${d.day}-${r.slot}`}
+                                className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg bg-background px-2 py-1.5 text-xs"
+                              >
+                                <span className="w-16 shrink-0 font-medium text-muted-foreground">
+                                  {slotLabel}
+                                </span>
+                                {r.currentTitle && (
+                                  <span className={cn('truncate', r.kind === 'lost' && 'line-through decoration-rose-400')}>
+                                    {r.currentTitle}
+                                  </span>
+                                )}
+                                {r.kind === 'replaced' && (
+                                  <ArrowRight aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+                                )}
+                                {r.templateTitle && r.kind !== 'kept' && (
+                                  <span className="truncate font-medium">{r.templateTitle}</span>
+                                )}
+                                <Badge
+                                  variant="outline"
+                                  className={cn('ml-auto shrink-0 px-1.5 py-0 text-[10px]', badge.className)}
+                                >
+                                  {badge.label}
+                                </Badge>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                    {diff.days.length === 0 && (
+                      <p className="py-4 text-center text-xs text-muted-foreground">
+                        Sin cambios que mostrar.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmApply(null)} disabled={applyingId !== null}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => confirmApply && void applyTemplate(confirmApply)}
+              disabled={applyingId !== null}
+            >
+              {applyingId !== null ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
               Sí, aplicar plantilla
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Editar una plantilla propia (nombre y descripción) */}
+      <Dialog open={!!editTemplate} onOpenChange={(o) => !o && setEditTemplate(null)}>
+        <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil aria-hidden="true" className="size-5 text-primary" />
+              Editar plantilla
+            </DialogTitle>
+            <DialogDescription>
+              Cambia el nombre o la descripción de «{editTemplate?.name}». El contenido de recetas
+              no se modifica: se actualiza guardando de nuevo el plan con «Guardar como plantilla».
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="template-edit-name">Nombre</Label>
+              <Input
+                id="template-edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                maxLength={60}
+                aria-describedby="template-edit-name-count"
+              />
+              <p id="template-edit-name-count" className="text-right text-xs text-muted-foreground">
+                {editName.length}/60
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="template-edit-description">Descripción</Label>
+              <Textarea
+                id="template-edit-description"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                maxLength={200}
+                rows={3}
+                placeholder={
+                  editTemplate?.isPublic
+                    ? 'Obligatoria en plantillas publicadas en la comunidad.'
+                    : 'Opcional: para quién es esta plantilla, en qué fase te sienta bien…'
+                }
+                aria-describedby="template-edit-description-count"
+              />
+              <p id="template-edit-description-count" className="text-right text-xs text-muted-foreground">
+                {editDescription.length}/200
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTemplate(null)} disabled={savingEdit}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void saveTemplateEdit()} disabled={savingEdit || !editName.trim()}>
+              {savingEdit ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Check aria-hidden="true" className="size-4" />
+              )}
+              Guardar cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

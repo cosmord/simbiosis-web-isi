@@ -11,7 +11,7 @@ export async function GET() {
 
   const SINCE = new Date(Date.now() - 14 * 24 * 3600 * 1000)
 
-  const [users, recipes, threads, publications, openReports, resolvedReports, recentUsers, recentRecipes, recentThreads, plannedMeals, cookedMeals, publicTemplates] =
+  const [users, recipes, threads, publications, openReports, resolvedReports, recentUsers, recentRecipes, recentThreads, plannedMeals, cookedMeals, publicTemplates, publicTemplateAgg] =
     await Promise.all([
       db.user.findMany({ select: { role: true, status: true } }),
       db.recipe.count({ where: { status: 'PUBLISHED' } }),
@@ -25,6 +25,13 @@ export async function GET() {
       db.mealPlanItem.count(),
       db.mealPlanItem.count({ where: { done: true } }),
       db.planTemplate.count({ where: { isPublic: true } }),
+      // Adopción de plantillas: suma de aplicaciones de las públicas + la más aplicada
+      db.planTemplate.findMany({
+        where: { isPublic: true },
+        select: { name: true, appliedCount: true, user: { select: { name: true } } },
+        orderBy: { appliedCount: 'desc' },
+        take: 1,
+      }),
     ])
 
   const byRole: Record<string, number> = {}
@@ -68,6 +75,14 @@ export async function GET() {
     if (i !== null) days[i].threads += 1
   }
 
+  // Suma de adopciones de las plantillas públicas (cuántas veces la comunidad
+  // ha aplicado menús de profesionales a sus planes).
+  const appliesAgg = await db.planTemplate.aggregate({
+    where: { isPublic: true },
+    _sum: { appliedCount: true },
+  })
+  const top = publicTemplateAgg[0] ?? null
+
   return ok({
     totals: {
       users: users.length,
@@ -79,7 +94,15 @@ export async function GET() {
       plannedMeals,
       cookedMeals,
       publicTemplates,
+      templateApplies: appliesAgg._sum.appliedCount ?? 0,
     },
+    topTemplate: top
+      ? {
+          name: top.name,
+          appliedCount: top.appliedCount,
+          authorName: top.user.name,
+        }
+      : null,
     usersByRole: byRole,
     usersByStatus: byStatus,
     activity: days,

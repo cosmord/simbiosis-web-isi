@@ -27,6 +27,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
+  TrendingUp,
+  Trophy,
   UtensilsCrossed,
   UserRound,
   Users,
@@ -217,11 +219,12 @@ function OverviewPanel() {
     { label: 'Comidas planificadas', value: stats.totals.plannedMeals, icon: UtensilsCrossed, className: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300' },
     { label: 'Comidas cocinadas', value: stats.totals.cookedMeals, icon: CheckCircle2, className: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' },
     { label: 'Plantillas de la comunidad', value: stats.totals.publicTemplates, icon: LayoutTemplate, className: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' },
+    { label: 'Adopciones de plantillas', value: stats.totals.templateApplies, icon: TrendingUp, className: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950 dark:text-fuchsia-300' },
   ]
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {totals.map(({ label, value, icon: Icon, className }) => (
           <Card key={label} className="transition-shadow hover:shadow-sm">
             <CardContent className="flex h-full items-center gap-3 p-4">
@@ -236,6 +239,26 @@ function OverviewPanel() {
           </Card>
         ))}
       </div>
+
+      {stats.topTemplate && (
+        <Card className="border-fuchsia-500/25 bg-gradient-to-r from-fuchsia-500/[0.06] via-transparent to-transparent transition-shadow hover:shadow-sm">
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300">
+              <Trophy aria-hidden="true" className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Plantilla más aplicada de la comunidad
+              </p>
+              <p className="truncate text-sm font-semibold">«{stats.topTemplate.name}»</p>
+              <p className="text-xs text-muted-foreground">
+                de {stats.topTemplate.authorName} · aplicada {stats.topTemplate.appliedCount}{' '}
+                {stats.topTemplate.appliedCount === 1 ? 'vez' : 'veces'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-4 sm:p-6">

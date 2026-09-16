@@ -412,6 +412,14 @@ export interface PlanTemplateAuthor {
   role: string
 }
 
+/** Referencia de una receta dentro de una plantilla (para la vista previa antes de aplicar). */
+export interface PlanTemplateItemRef {
+  day: number
+  slot: string
+  recipeId: string
+  recipeTitle: string
+}
+
 export interface PlanTemplateData {
   id: string
   name: string
@@ -422,6 +430,8 @@ export interface PlanTemplateData {
   dayCount?: number
   /** Veces que otros usuarios han aplicado la plantilla a su plan. */
   appliedCount?: number
+  /** Contenido de la plantilla (recetas por hueco) para el diff antes de aplicar. */
+  items?: PlanTemplateItemRef[]
   /** Autor solo en las plantillas de la comunidad. */
   author?: PlanTemplateAuthor
 }
@@ -499,7 +509,11 @@ export interface CoordinatorStatsData {
     plannedMeals: number
     cookedMeals: number
     publicTemplates: number
+    /** Suma de aplicaciones de las plantillas publicadas (adopción de la comunidad). */
+    templateApplies: number
   }
+  /** Plantilla pública más aplicada (null si todavía no hay ninguna con adopciones). */
+  topTemplate: { name: string; appliedCount: number; authorName: string } | null
   usersByRole: Record<string, number>
   usersByStatus: Record<string, number>
   activity: { date: string; label: string; users: number; recipes: number; threads: number }[]
