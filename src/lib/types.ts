@@ -377,6 +377,7 @@ export type NotificationType =
   | 'LIKE'
   | 'ACCOUNT'
   | 'MODERATION'
+  | 'PLAN'
 
 export interface NotificationData {
   id: string

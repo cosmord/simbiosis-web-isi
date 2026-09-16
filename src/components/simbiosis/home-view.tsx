@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import {
@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import { RecipeCard, RecipeCardSkeleton } from './recipe-card'
 import { StatsBanner } from './stats-banner'
 import { EmptyState } from './empty-state'
@@ -380,12 +381,32 @@ function TodayMenuCard() {
   const { user, navigate } = useSimbiosis()
   const [items, setItems] = useState<PlanItemData[] | null>(null)
   const [today, setToday] = useState<number | null>(null)
+  const remindDone = useRef(false)
 
   useEffect(() => {
     if (!user) return
     const t = setTimeout(() => setToday((new Date().getDay() + 6) % 7), 0)
     api<{ items: PlanItemData[] }>('/api/plan')
-      .then((d) => setItems(d.items))
+      .then(async (d) => {
+        if (!remindDone.current) {
+          remindDone.current = true
+          try {
+            const r = await api<{ created: boolean; notification?: { body: string } }>(
+              '/api/plan/remind',
+              { method: 'POST' }
+            )
+            if (r.created && r.notification) {
+              toast.success('Recordatorio: tu menú de hoy está listo 🍽️', {
+                description: r.notification.body,
+                duration: 8000,
+              })
+            }
+          } catch {
+            // El recordatorio es best-effort: no debe molestar si falla.
+          }
+        }
+        setItems(d.items)
+      })
       .catch(() => setItems([]))
     return () => clearTimeout(t)
   }, [user])

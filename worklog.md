@@ -281,3 +281,38 @@ Stage Summary:
 - Cuentas demo (contraseña simbiosis123): coordinador@ / nutricionista@ / medico@ / paciente@ / cuidador@simbiosis.org.
 - Riesgos/notas: (a) al editar globals.css puede hacer falta touch + recarga forzada o reinicio con borrado de .next/cache para que Turbopack resirva el CSS; (b) bun CLI + scripts one-off fuera del proyecto resuelven mal @prisma/client (usar cwd del proyecto o SQL crudo); (c) la descarga del CSV no se pudo verificar con fichero en disco en el sandbox headless (blob + anchor click), pero el contenido/escape se validó por eval y el patrón es el mismo que el export del diario verificado en la ronda 7.
 - Recomendaciones siguiente ronda: notificación/recordatorio programado con el menú del día (cron interno o al primer arranque del día); exportar el PLAN completo (7 días) a PDF imprimible reutilizando el patrón @media print; i18n multi-idioma (el doc pide decidir idiomas); paginar comentarios/valoraciones si crecen; test de accesibilidad (aria-live en toasts ya cubierto por sonner, revisar foco en diálogos anidados).
+
+---
+Task ID: 10
+Agent: main (cron webDevReview — ronda de revisión continua #5)
+Task: QA de regresión + recordatorio diario del menú + imprimir plan semanal + copiar día del plan + contadores animados + botón "volver arriba" + decisión de idiomas
+
+Work Log:
+- QA de regresión con agent-browser (escritorio 1440x900, móvil 390x844, claro/oscuro): todas las vistas sin errores de consola. Proyecto estable al inicio de la ronda.
+- NUEVO: recordatorio diario del menú del día (tipo de notificación PLAN):
+  - API `POST /api/plan/remind` (nuevo route): calcula el día actual (lunes=0), si hay recetas planificadas hoy y aún no se ha notificado HOY (deduplicación por fecha con findFirst type=PLAN createdAt>=inicio del día), crea una notificación "Tu menú de hoy" con el resumen "Desayuno: X · Comida: Y · Cena: Z" y linkView 'plan'. Devuelve {created, reason} (EMPTY_TODAY / ALREADY_NOTIFIED).
+  - home-view (TodayMenuCard): tras cargar el plan, llama al endpoint una sola vez por montaje (ref guard) y muestra un toast sonner con el resumen durante 8 s si se creó. Best-effort: fallos silenciosos.
+  - types.ts: añadido 'PLAN' al union NotificationType; notification-bell: meta PLAN con CalendarCheck en lime (distinto del ámbar de RATING) y 'plan' añadido a VALID_LINK_VIEWS para el deep-link.
+  - Verificado E2E: plan vacío hoy → sin toast; rellenado hoy (miércoles) vía API → recarga → toast con el menú + notificación en la campana con icono lima y punto sin leer; recarga de nuevo → sin toast (deduplicado OK); clic en la notificación → navega al plan y limpia el badge. curl sin sesión → 401 correcto.
+- NUEVO: imprimir el plan semanal (patrón @media print existente generalizado):
+  - plan-view: botón "Imprimir plan" (Printer) junto a "Vaciar semana"; el contenedor de la rejilla + lista de la compra lleva .print-plan / .print-plan-layout y la rejilla interna .print-plan-grid; cabecera exclusiva de impresión (hidden print:block) con título, semana es-ES y nº de recetas; botones interactivos (quitar/añadir/copiar/CSV/copiar lista/contador de marcados) con print:hidden.
+  - globals.css: reglas .print-plan (visibilidad, posición absoluta, colores forzados stone-900/bordes stone-300), .print-plan-layout display:block, rejilla a 2 columnas con gap 6pt, break-inside: avoid por día y listas sin max-height en papel.
+  - Verificado con agent-browser pdf: página 1 con cabecera + 7 días en 2 columnas (sin navbar/sidebar/botones), página 2 con el día restante + lista de la compra completa (sin recorte por el scroll).
+- NUEVO: copiar el menú de un día a otro (plan-view):
+  - Botón Copy (ghost, size-7, print:hidden) en la cabecera de cada día con recetas; Popover con los otros 6 días y contador (N/4) del destino; copyDay() hace PUT /api/plan en paralelo para las franjas de origen (sobrescribe el destino), refresca sin spinner (fetchPlan separado de load) y toast con el resultado.
+  - Verificado E2E: menú del miércoles copiado al jueves → toast "Menú del miércoles copiado al jueves (3 recetas)", jueves 3/4 con las mismas recetas y lista de la compra recalculada (badge 6 recetas, contadores ×2). Datos de demo dejados así (miércoles+hoy jueves rellenos, realistas).
+- Bug corregido: desbordamiento horizontal del planificador en móvil (390 px): las tarjetas de días con recetas medían min-content 424 px (el botón de título con truncate no limita el tamaño intrínseco en flex anidados) porque la rejilla diaria no tenía columna explícita en móvil (columna implícita auto). Añadido grid-cols-1 a la rejilla de días y al contenedor principal (minmax(0,1fr) fija el mínimo a 0). Verificado scrollWidth = clientWidth = 390 tras el fix. El bug era previo a esta ronda (no lo causaba el botón copiar).
+- Pulido visual (obligatorio de la ronda):
+  - StatsBanner: contadores animados al cargar (AnimatedNumber con rAF, ease-out 900 ms, respeta prefers-reduced-motion, numEs + decimales + sufijo), tabular-nums y hover:shadow-md en las tarjetas.
+  - Nuevo componente scroll-to-top.tsx: botón flotante "Volver arriba" (aparece a los 600 px, scroll suave, framer-motion entrada/salida, fondo blur, safe-area-inset-bottom, print:hidden) montado globalmente en page.tsx.
+  - about-dialog: decisión de idiomas registrada en la ficha del proyecto ("Idiomas: la interfaz se ofrece en español (es-ES), decisión de alcance de la v1 con arquitectura preparada para traducciones") — cubre la exigencia del doc v2.2 de decidir los idiomas.
+- Nota de lint: react-hooks/set-state-in-effect en el rama reduced-motion de AnimatedNumber → resuelto unificando la animación con duration=0 (mismo camino rAF).
+- Verificación final: bun run lint sin errores; dev.log sin errores; barrido de errores de consola en home/recetas/foro/consejos/salud/plan/perfil en oscuro; diálogo Acerca verificado con el nuevo texto.
+
+Stage Summary:
+- Nuevas funcionalidades OPERATIVAS y verificadas: recordatorio diario del menú (notificación PLAN + toast con deduplicación diaria), impresión del plan semanal (hoja limpia a 2 columnas + lista de la compra), copiar el menú de un día a otro, contadores animados de estadísticas y botón "volver arriba".
+- Bug resuelto: overflow horizontal del planificador en móvil (<640 px) con días rellenos.
+- Estado BD: 10 usuarios, 9 recetas, 4 hilos, 4 publicaciones, 2 denuncias OPEN de demo; plan de Marta con miércoles y jueves rellenos (6 recetas) y 1 notificación PLAN de demo (leída); correos y notificaciones anteriores intactos. No hubo cambios de esquema.
+- Cuentas demo (contraseña simbiosis123): coordinador@ / nutricionista@ / medico@ / paciente@ / cuidador@simbiosis.org.
+- Riesgos/notas: (a) el recordatorio depende de que el usuario abra la app (no hay cron real); máximo 1 notificación PLAN por día y solo si hay menú para hoy; (b) la impresión del plan reutiliza el truco de visibility: si el usuario imprime desde otra vista, no afecta (solo .print-recipe/.print-plan); (c) el desbordamiento del truncate en flex anidados puede repetirse en otros grids implícitos sin grid-cols-1 — revisar si se añaden.
+- Recomendaciones siguiente ronda: plantillas de menú (guardar/recuperar planes con nombre); recordatorio programado real (cron interno del mini-servidor o endpoint con token para tareas programadas); modo "consejo del nutricionista" al registrar síntomas altos en el diario; i18n real (esquema de traducciones ya decidido el alcance); accesibilidad focal en popovers anidados.

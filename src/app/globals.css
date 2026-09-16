@@ -204,4 +204,47 @@
   .print-recipe .rounded-2xl {
     border-radius: 10px !important;
   }
+
+  /* -------------------------------------------------------------------------
+     Hoja imprimible del plan semanal (.print-plan): rejilla de 7 días +
+     lista de la compra. Botones de acción ocultos con la utilidad print:hidden.
+  ------------------------------------------------------------------------- */
+  .print-plan,
+  .print-plan * {
+    visibility: visible !important;
+  }
+
+  .print-plan {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    color: #1c1917 !important;
+  }
+
+  .print-plan * {
+    color: #1c1917 !important;
+    background-color: transparent !important;
+    border-color: #d6d3d1 !important;
+    box-shadow: none !important;
+  }
+
+  /* El contenedor deja de ser rejilla lateral y los días se reparten en 2 columnas */
+  .print-plan.print-plan-layout {
+    display: block !important;
+  }
+
+  .print-plan .print-plan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6pt !important;
+  }
+
+  .print-plan .print-plan-grid > * {
+    break-inside: avoid;
+  }
+
+  /* La lista de la compra no se corta por el scroll del contenedor */
+  .print-plan ul {
+    max-height: none !important;
+    overflow: visible !important;
+  }
 }

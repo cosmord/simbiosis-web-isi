@@ -203,7 +203,9 @@ export function AboutDialog({ children }: { children?: React.ReactNode }) {
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <p className="text-xs text-muted-foreground">
             Restricciones del proyecto: 6 meses de duración · presupuesto de 90.000 € ·
-            equipo reducido.
+            equipo reducido. <strong className="font-medium text-foreground">Idiomas:</strong> la
+            interfaz se ofrece en español (es-ES), decisión de alcance de la v1 con la
+            arquitectura preparada para añadir traducciones en el futuro.
           </p>
           <Button
             size="sm"

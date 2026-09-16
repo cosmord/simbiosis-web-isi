@@ -7,10 +7,12 @@ import {
   Check,
   ClipboardCopy,
   Cookie,
+  Copy,
   Download,
   Loader2,
   Moon,
   Plus,
+  Printer,
   ShoppingBasket,
   Sun,
   Sunrise,
@@ -25,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Dialog,
   DialogContent,
@@ -96,22 +99,27 @@ export function PlanView() {
   const [picker, setPicker] = useState<{ day: number; slot: PlanSlot } | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [copySource, setCopySource] = useState<number | null>(null)
   // Día actual (0 = lunes … 6 = domingo). Se resuelve tras montar para evitar
   // discrepancias de hidratación entre servidor y cliente.
   const [today, setToday] = useState<number | null>(null)
 
+  const fetchPlan = useCallback(async () => {
+    const d = await api<{ items: PlanItemData[] }>('/api/plan')
+    setItems(d.items)
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const d = await api<{ items: PlanItemData[] }>('/api/plan')
-      setItems(d.items)
+      await fetchPlan()
     } catch (err) {
       setItems([])
       toast.error(err instanceof Error ? err.message : 'No se pudo cargar tu plan semanal.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fetchPlan])
 
   useEffect(() => {
     if (user) void load()
@@ -167,6 +175,28 @@ export function PlanView() {
       toast.success('Plan semanal vaciado.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo vaciar el plan.')
+    }
+  }
+
+  /** Copia todas las franjas planificadas de un día a otro (sobrescribe el destino). */
+  async function copyDay(from: number, to: number) {
+    const source = PLAN_SLOTS.map(({ value }) => itemAt(from, value)).filter(
+      (it): it is PlanItemData => !!it
+    )
+    setCopySource(null)
+    if (source.length === 0) return
+    try {
+      await Promise.all(
+        source.map((it) =>
+          api('/api/plan', jsonBody('PUT', { day: to, slot: it.slot, recipeId: it.recipe.id }))
+        )
+      )
+      await fetchPlan()
+      toast.success(
+        `Menú del ${PLAN_DAY_NAMES[from].toLowerCase()} copiado al ${PLAN_DAY_NAMES[to].toLowerCase()} (${source.length} ${source.length === 1 ? 'receta' : 'recetas'}).`
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo copiar el menú del día.')
     }
   }
 
@@ -242,13 +272,18 @@ export function PlanView() {
           </p>
         </div>
         {plannedCount > 0 && (
-          <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" className="min-h-11">
-                <Trash2 aria-hidden="true" className="size-4" />
-                Vaciar semana
-              </Button>
-            </AlertDialogTrigger>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="min-h-11" onClick={() => window.print()}>
+              <Printer aria-hidden="true" className="size-4" />
+              Imprimir plan
+            </Button>
+            <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="min-h-11">
+                  <Trash2 aria-hidden="true" className="size-4" />
+                  Vaciar semana
+                </Button>
+              </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>¿Vaciar todo el plan semanal?</AlertDialogTitle>
@@ -267,12 +302,20 @@ export function PlanView() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          </div>
         )}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+      <div className="print-plan print-plan-layout grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
         {/* Rejilla de días */}
-        <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+        <div className="print-plan-grid grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+          {/* Cabecera exclusiva de la hoja impresa */}
+          <header className="hidden print:mb-3 print:block sm:col-span-2 2xl:col-span-3">
+            <h1 className="text-lg font-bold">Mi plan semanal · Simbiosis</h1>
+            <p className="text-xs text-muted-foreground">
+              Menú para la semana del {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} · {plannedCount} {plannedCount === 1 ? 'receta planificada' : 'recetas planificadas'}
+            </p>
+          </header>
           {PLAN_DAY_NAMES.map((dayName, day) => {
             const dayItems = PLAN_SLOTS.map((slot) => ({ slot, item: itemAt(day, slot.value) }))
             const filled = dayItems.filter((d) => d.item).length
@@ -300,17 +343,59 @@ export function PlanView() {
                         </Badge>
                       )}
                     </CardTitle>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'px-1.5 py-0 text-[10px]',
-                        filled === 4
-                          ? 'border-primary/40 bg-primary/10 text-primary'
-                          : 'text-muted-foreground'
+                    <div className="flex items-center gap-1">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'px-1.5 py-0 text-[10px]',
+                          filled === 4
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'text-muted-foreground'
+                        )}
+                      >
+                        {filled}/4
+                      </Badge>
+                      {filled > 0 && (
+                        <Popover open={copySource === day} onOpenChange={(o) => setCopySource(o ? day : null)}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 rounded-full text-muted-foreground hover:text-primary print:hidden"
+                              aria-label={`Copiar el menú del ${dayName.toLowerCase()} a otro día`}
+                              title="Copiar a otro día"
+                            >
+                              <Copy aria-hidden="true" className="size-3.5" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-56 p-2">
+                            <p className="px-2 pb-1.5 text-xs font-semibold text-muted-foreground">
+                              Copiar menú del {dayName.toLowerCase()} a…
+                            </p>
+                            <div className="space-y-0.5">
+                              {PLAN_DAY_NAMES.map((targetName, target) =>
+                                target === day ? null : (
+                                  <button
+                                    key={targetName}
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                                    onClick={() => void copyDay(day, target)}
+                                    aria-label={`Copiar el menú del ${dayName.toLowerCase()} al ${targetName.toLowerCase()}`}
+                                  >
+                                    {targetName}
+                                    {PLAN_SLOTS.filter(({ value }) => itemAt(target, value)).length > 0 && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {PLAN_SLOTS.filter(({ value }) => itemAt(target, value)).length}/4
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       )}
-                    >
-                      {filled}/4
-                    </Badge>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-1.5">
                     {dayItems.map(({ slot: slotDef, item }) => {
@@ -338,7 +423,7 @@ export function PlanView() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="size-6 shrink-0 rounded-full text-muted-foreground hover:text-destructive"
+                                className="size-6 shrink-0 rounded-full text-muted-foreground hover:text-destructive print:hidden"
                                 onClick={() => void removeItem(item.id)}
                                 aria-label={`Quitar ${item.recipe.title} del ${slotLabel.toLowerCase()} del ${dayName.toLowerCase()}`}
                               >
@@ -348,7 +433,7 @@ export function PlanView() {
                           ) : (
                             <button
                               type="button"
-                              className="flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                              className="flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring print:hidden"
                               onClick={() => setPicker({ day, slot: slotDef.value })}
                               aria-label={`Añadir receta al ${slotLabel.toLowerCase()} del ${dayName.toLowerCase()}`}
                             >
@@ -433,7 +518,7 @@ export function PlanView() {
                   })}
                 </ul>
                 <Separator />
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 print:hidden">
                   <span className="text-xs text-muted-foreground">
                     {checked.size} de {shoppingList.length} marcados
                   </span>

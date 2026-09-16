@@ -21,6 +21,7 @@ import { PlanView } from '@/components/simbiosis/plan-view'
 import { ProfileView } from '@/components/simbiosis/profile-view'
 import { UserProfileView } from '@/components/simbiosis/user-profile-view'
 import { CoordinatorView } from '@/components/simbiosis/coordinator-view'
+import { ScrollToTop } from '@/components/simbiosis/scroll-to-top'
 import { api } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
 import type { User } from '@/lib/types'
@@ -134,6 +135,7 @@ function AppShell() {
       <AuthView />
       <GuideModal />
       <ReportDialog />
+      <ScrollToTop />
     </div>
   )
 }

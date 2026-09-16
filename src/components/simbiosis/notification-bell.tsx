@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bell,
+  CalendarCheck,
   CheckCheck,
   Heart,
   MessageCircle,
@@ -41,9 +42,10 @@ const TYPE_META: Record<
   LIKE: { icon: Heart, className: 'text-pink-700 dark:text-pink-300', ring: 'bg-pink-100 dark:bg-pink-950' },
   ACCOUNT: { icon: UserCheck, className: 'text-emerald-700 dark:text-emerald-300', ring: 'bg-emerald-100 dark:bg-emerald-950' },
   MODERATION: { icon: ShieldAlert, className: 'text-orange-700 dark:text-orange-300', ring: 'bg-orange-100 dark:bg-orange-950' },
+  PLAN: { icon: CalendarCheck, className: 'text-lime-700 dark:text-lime-300', ring: 'bg-lime-100 dark:bg-lime-950' },
 }
 
-const VALID_LINK_VIEWS: View[] = ['recipeDetail', 'threadDetail', 'publications', 'recipes', 'forum', 'profile']
+const VALID_LINK_VIEWS: View[] = ['recipeDetail', 'threadDetail', 'publications', 'recipes', 'forum', 'profile', 'plan']
 
 function castView(view: string | null): View | null {
   if (view && (VALID_LINK_VIEWS as string[]).includes(view)) return view as View
