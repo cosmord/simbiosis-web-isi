@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   CalendarDays,
+  CalendarPlus,
   Check,
   Clock,
   Flag,
@@ -25,6 +26,21 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -42,6 +58,7 @@ import { EmptyState } from './empty-state'
 import { api, jsonBody } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
 import { longDate, numEs, relativeTime } from '@/lib/format'
+import { PLAN_DAY_NAMES, PLAN_SLOTS, type PlanSlot } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import type { RecipeDetailData, RecipeSummary } from '@/lib/types'
 
@@ -88,6 +105,10 @@ export function RecipeDetail({ id }: { id: string }) {
   const [comment, setComment] = useState('')
   const [postingComment, setPostingComment] = useState(false)
   const [favorite, setFavorite] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
+  const [planDay, setPlanDay] = useState('0')
+  const [planSlot, setPlanSlot] = useState<PlanSlot>('LUNCH')
+  const [savingPlan, setSavingPlan] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -177,6 +198,26 @@ export function RecipeDetail({ id }: { id: string }) {
       toast.error(err instanceof Error ? err.message : 'No se pudo publicar el comentario.')
     } finally {
       setPostingComment(false)
+    }
+  }
+
+  async function addToPlan() {
+    if (!user) {
+      toast.info('Inicia sesión para planificar tus menús.')
+      setAuthOpen(true)
+      return
+    }
+    setSavingPlan(true)
+    try {
+      await api('/api/plan', jsonBody('PUT', { day: Number(planDay), slot: planSlot, recipeId: id }))
+      const dayName = PLAN_DAY_NAMES[Number(planDay)]
+      const slotLabel = PLAN_SLOTS.find((s) => s.value === planSlot)?.label ?? ''
+      toast.success(`Añadida a tu plan: ${dayName} (${slotLabel.toLowerCase()}).`)
+      setPlanOpen(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo añadir al plan.')
+    } finally {
+      setSavingPlan(false)
     }
   }
 
@@ -461,7 +502,14 @@ export function RecipeDetail({ id }: { id: string }) {
               <UserAvatar name={data.author.name} role={data.author.role} className="size-11" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="font-semibold">{data.author.name}</p>
+                  <button
+                    type="button"
+                    className="font-semibold outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => navigate('userProfile', { id: data.author.id })}
+                    aria-label={`Ver el perfil público de ${data.author.name}`}
+                  >
+                    {data.author.name}
+                  </button>
                   <RoleBadge role={data.author.role} />
                 </div>
                 {data.author.bio && (
@@ -478,6 +526,14 @@ export function RecipeDetail({ id }: { id: string }) {
           {/* Acciones */}
           <Card>
             <CardContent className="space-y-2 p-4">
+              <Button
+                variant="outline"
+                className="w-full min-h-11 justify-start"
+                onClick={() => (user ? setPlanOpen(true) : (toast.info('Inicia sesión para planificar tus menús.'), setAuthOpen(true)))}
+              >
+                <CalendarPlus aria-hidden="true" className="size-4 text-primary" />
+                Añadir a mi plan semanal
+              </Button>
               <Button
                 variant={favorite ? 'secondary' : 'outline'}
                 className="w-full min-h-11 justify-start"
@@ -584,6 +640,63 @@ export function RecipeDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {/* Diálogo: añadir al plan semanal */}
+      <Dialog open={planOpen} onOpenChange={setPlanOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Añadir a mi plan semanal</DialogTitle>
+            <DialogDescription>
+              Elige el día y la franja de comida. Si ya había una receta, se sustituirá.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="plan-day" className="text-sm font-medium">
+                Día
+              </label>
+              <Select value={planDay} onValueChange={setPlanDay}>
+                <SelectTrigger id="plan-day" aria-label="Día de la semana" className="min-h-11 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PLAN_DAY_NAMES.map((d, i) => (
+                    <SelectItem key={d} value={String(i)}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="plan-slot" className="text-sm font-medium">
+                Franja
+              </label>
+              <Select value={planSlot} onValueChange={(v) => setPlanSlot(v as PlanSlot)}>
+                <SelectTrigger id="plan-slot" aria-label="Franja de comida" className="min-h-11 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PLAN_SLOTS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPlanOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void addToPlan()} disabled={savingPlan} className="min-h-11">
+              {savingPlan && <Loader2 className="size-4 animate-spin" />}
+              Añadir al plan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

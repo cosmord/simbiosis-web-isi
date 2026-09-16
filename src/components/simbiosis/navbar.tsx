@@ -5,6 +5,7 @@ import { useTheme } from 'next-themes'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   BookOpenCheck,
+  CalendarDays,
   ChefHat,
   HeartPulse,
   HelpCircle,
@@ -90,6 +91,7 @@ export function Navbar() {
         { label: 'Mi perfil', icon: UserIcon, action: () => navigate('profile') },
         { label: 'Mis recetas', icon: ChefHat, action: () => navigate('profile', { tab: 'recipes' }) },
         { label: 'Mis favoritos', icon: Heart, action: () => navigate('profile', { tab: 'favorites' }) },
+        { label: 'Mi plan semanal', icon: CalendarDays, action: () => navigate('plan') },
         { label: 'Mis datos de salud', icon: HeartPulse, action: () => navigate('health') },
         ...(user.role === 'COORDINATOR'
           ? [{ label: 'Panel de coordinación', icon: ShieldCheck, action: () => navigate('coordinator') }]
@@ -233,6 +235,20 @@ export function Navbar() {
               {label}
             </Button>
           ))}
+          {user && (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-current={isActive('plan') ? 'page' : undefined}
+              className={cn(
+                'min-h-9 rounded-full px-3.5 text-sm',
+                isActive('plan') && 'bg-secondary font-semibold text-secondary-foreground'
+              )}
+              onClick={() => navigate('plan')}
+            >
+              Mi plan semanal
+            </Button>
+          )}
           {user && (
             <Button
               variant="ghost"

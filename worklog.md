@@ -166,3 +166,23 @@ Work Log:
 Stage Summary:
 - Proyecto FUNCIONAL y verificado en navegador de extremo a extremo. Estado de BD: 10 usuarios (incl. Diego Pascual aprobado en la demo), 9 recetas (8 seed + puré de Diego), 4 hilos, 4 publicaciones, 1 denuncia abierta (info de salud riesgosa) para demo de moderación, 1 profesional pendiente restante: ninguno (Carla aprobada; si se re-seede vuelve a estar pendiente).
 - Cuentas demo: coordinador@simbiosis.org / nutricionista@simbiosis.org / medico@simbiosis.org / paciente@simbiosis.org / cuidador@simbiosis.org — contraseña simbiosis123 (chips de acceso rápido en el login).
+
+---
+Task ID: 6
+Agent: main (cron webDevReview — ronda de revisión continua #1)
+Task: QA de regresión + nuevas funcionalidades (planificador semanal, perfiles públicos, imágenes IA)
+
+Work Log:
+- QA de regresión con agent-browser: home, listado (9 recetas), detalle de receta, sin errores de consola. Proyecto estable tras la ronda anterior.
+- NUEVO MÓDULO "Mi plan semanal" (planificador de menús): modelo MealPlanItem (day 0-6, slot BREAKFAST|LUNCH|DINNER|SNACK, unique [userId,day,slot], cascade) + db push. APIs: GET/PUT/DELETE /api/plan (listar/asignar por upsert/vaciar) y DELETE /api/plan/[id]. Vista plan-view.tsx: rejilla 7 días × 4 franjas con contadores x/4, diálogo selector de receta con búsqueda debounced, lista de la compra agregada (agrupa ingredientes iguales con ×N, checkboxes locales, copiar al portapapeles), botón "Vaciar semana" con confirmación. Plan de ejemplo precargado para paciente@simbiosis.org (14 slots). Enlace en navbar (escritorio + menú de cuenta + sheet móvil).
+- Añadir al plan desde el detalle de receta: botón "Añadir a mi plan semanal" + diálogo día/franja (Select) → PUT /api/plan.
+- NUEVO: perfiles públicos de autor: GET /api/users/[id] (bio, stats: recetas/valoración media/favoritos recibidos, recetas PUBLISHED con resumen). Vista user-profile-view.tsx (banner degradado, avatar, chips de stats, grid de recetas). Nombres de autor ahora clicables en: detalle de receta, respuestas e hilos del foro, tarjetas y diálogo de publicaciones.
+- NUEVO: imagen de receta generada con IA: POST /api/recipes/generate-image (z-ai-web-dev-sdk server-side, 1024x1024, guarda en public/images/generated/). Botón "Generar con IA" en recipe-form (deshabilitado sin título, spinner, previsualización con botón quitar). Verificado E2E en navegador (~45s por imagen) y vía curl.
+- Generadas imágenes para las 2 recetas seed sin foto (sopa-fideos.png, bizcocho-manzana.png) + regenerada arroz-pollo.png (había desaparecido del disco; el optimizador de next/image devolvía "isn't a valid image ... received null").
+- Bugs corregidos en esta ronda: (1) slot de PLAN_SLOTS pasaba el objeto en vez del valor → etiquetas "undefined" en aria-labels y franjas del planificador; (2) setState síncrono en useEffect del selector (regla react-hooks/set-state-in-effect) → reset movido a handleClose y loading dentro del timeout; (3) cliente Prisma obsoleto en el dev server tras db:push (singleton en globalThis sin mealPlanItem) → reinicio del servidor; nota: el sandbox mata procesos lanzados entre llamadas si no van desacoplados, relanzado con setsid + doble fork.
+- bun run lint sin errores.
+
+Stage Summary:
+- Nuevas funcionalidades OPERATIVAS y verificadas en navegador: planificador semanal completo con lista de la compra, perfiles públicos clicables, generación de imágenes IA en el formulario (y las 9 recetas del seed tienen ahora foto).
+- Riesgos/notas: (a) la generación IA tarda 40-60s por imagen y el servicio puede devolver 429 si se abusa — el botón muestra "Generando…" y el error cae a toast; (b) si el dev server muere hay que relanzarlo con `setsid nohup bun run dev &` desde bash desacoplado (el sandbox puede segar procesos hijos entre llamadas); (c) las imágenes del CLI se guardan como datos JPEG con extensión .png (sharp/next las optimiza sin problema).
+- Recomendaciones siguiente ronda: sección "Sobre el proyecto" con objetivos de negocio BO-01..BO-06 y stakeholders (material del caso); notificaciones in-app (respuestas a tus hilos, cuenta aprobada); paginación en recetas/foro; exportar diario de salud a CSV; tests de accesibilidad.

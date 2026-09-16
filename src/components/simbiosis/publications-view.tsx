@@ -75,7 +75,7 @@ const CATEGORY_META: Record<
 
 /** Consejos de salud publicados por profesionales, con me gusta y lectura completa. */
 export function PublicationsView() {
-  const { user, setAuthOpen, refreshKey } = useSimbiosis()
+  const { user, setAuthOpen, refreshKey, navigate } = useSimbiosis()
   const [publications, setPublications] = useState<PublicationCardData[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -217,7 +217,14 @@ export function PublicationsView() {
                     <div className="mt-auto space-y-3">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <UserAvatar name={pub.author.name} role={pub.author.role} className="size-6" />
-                        <span className="truncate font-medium text-foreground/80">{pub.author.name}</span>
+                        <button
+                          type="button"
+                          className="truncate font-medium text-foreground/80 outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => navigate('userProfile', { id: pub.author.id })}
+                          aria-label={`Ver el perfil público de ${pub.author.name}`}
+                        >
+                          {pub.author.name}
+                        </button>
                         <RoleBadge role={pub.author.role} />
                       </div>
                       <div className="flex items-center justify-between">
@@ -275,7 +282,17 @@ export function PublicationsView() {
                   <DialogTitle className="text-left text-xl leading-snug">{reading.title}</DialogTitle>
                   <DialogDescription className="flex flex-wrap items-center gap-2 text-left">
                     <UserAvatar name={reading.author.name} role={reading.author.role} className="size-6" />
-                    <span className="font-medium text-foreground">{reading.author.name}</span>
+                    <button
+                      type="button"
+                      className="font-medium text-foreground outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => {
+                        setReading(null)
+                        navigate('userProfile', { id: reading.author.id })
+                      }}
+                      aria-label={`Ver el perfil público de ${reading.author.name}`}
+                    >
+                      {reading.author.name}
+                    </button>
                     <RoleBadge role={reading.author.role} />
                     <span className="inline-flex items-center gap-1">
                       <CalendarDays aria-hidden="true" className="size-3.5" />

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ImagePlus, Loader2, Plus, Trash2, UtensilsCrossed, X } from 'lucide-react'
+import { ArrowLeft, ImagePlus, Loader2, Plus, Sparkles, Trash2, UtensilsCrossed, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ImageWithFallback } from './image-with-fallback'
 import { cn } from '@/lib/utils'
 import { api, jsonBody } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
@@ -41,6 +42,7 @@ export function RecipeForm() {
   const [prepTime, setPrepTime] = useState(String(editing?.prepTime ?? 30))
   const [servings, setServings] = useState(String(editing?.servings ?? 2))
   const [image, setImage] = useState(editing?.image ?? '')
+  const [generatingImage, setGeneratingImage] = useState(false)
   const [tags, setTags] = useState<string[]>(editing?.tags ?? [])
   const [suitableFor, setSuitableFor] = useState<string[]>(editing?.suitableFor ?? [])
   const [ingredients, setIngredients] = useState<string[]>(
@@ -76,6 +78,23 @@ export function RecipeForm() {
 
   function toggle(list: string[], setList: (v: string[]) => void, value: string) {
     setList(list.includes(value) ? list.filter((x) => x !== value) : [...list, value])
+  }
+
+  /** Genera una imagen de plato con IA a partir del título y la descripción. */
+  async function generateImage() {
+    setGeneratingImage(true)
+    try {
+      const d = await api<{ image: string }>('/api/recipes/generate-image', jsonBody('POST', {
+        title: title.trim(),
+        description: description.trim(),
+      }))
+      setImage(d.image)
+      toast.success('¡Imagen generada! Se usará al publicar la receta.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo generar la imagen.')
+    } finally {
+      setGeneratingImage(false)
+    }
   }
 
   async function submit() {
@@ -237,9 +256,42 @@ export function RecipeForm() {
                 className="pl-9"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Puedes dejarlo vacío: se mostrará un diseño de respaldo con el logo de la comunidad.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Puedes dejarlo vacío: se mostrará un diseño de respaldo con el logo de la comunidad.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 gap-1.5"
+                disabled={generatingImage || title.trim().length < 3}
+                onClick={() => void generateImage()}
+                aria-label="Generar una imagen para esta receta con inteligencia artificial"
+              >
+                {generatingImage ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles aria-hidden="true" className="size-4 text-primary" />
+                )}
+                {generatingImage ? 'Generando…' : 'Generar con IA'}
+              </Button>
+            </div>
+            {image && (
+              <div className="relative h-36 w-full max-w-xs overflow-hidden rounded-xl border">
+                <ImageWithFallback src={image} alt="Previsualización de la imagen de la receta" sizes="320px" />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute right-2 top-2 size-7 rounded-full"
+                  onClick={() => setImage('')}
+                  aria-label="Quitar la imagen"
+                >
+                  <X aria-hidden="true" className="size-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

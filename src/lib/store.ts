@@ -10,7 +10,9 @@ export type View =
   | 'threadDetail'
   | 'publications'
   | 'health'
+  | 'plan'
   | 'profile'
+  | 'userProfile'
   | 'coordinator'
 
 export interface ViewParams {

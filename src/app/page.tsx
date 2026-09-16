@@ -17,7 +17,9 @@ import { ForumView } from '@/components/simbiosis/forum-view'
 import { ThreadDetail } from '@/components/simbiosis/thread-detail'
 import { PublicationsView } from '@/components/simbiosis/publications-view'
 import { HealthView } from '@/components/simbiosis/health-view'
+import { PlanView } from '@/components/simbiosis/plan-view'
 import { ProfileView } from '@/components/simbiosis/profile-view'
+import { UserProfileView } from '@/components/simbiosis/user-profile-view'
 import { CoordinatorView } from '@/components/simbiosis/coordinator-view'
 import { api } from '@/lib/client-api'
 import { useSimbiosis } from '@/lib/store'
@@ -70,6 +72,14 @@ function ViewContent() {
       return <PublicationsView />
     case 'health':
       return <HealthView />
+    case 'plan':
+      return <PlanView />
+    case 'userProfile':
+      return viewParams.id ? (
+        <UserProfileView id={String(viewParams.id)} />
+      ) : (
+        <HomeView />
+      )
     case 'profile':
       return <ProfileView />
     case 'coordinator':

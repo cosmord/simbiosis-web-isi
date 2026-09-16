@@ -335,3 +335,54 @@ export const REPORT_TARGET_LABELS: Record<ReportTargetType, string> = {
   PUBLICATION: 'Consejo de salud',
   USER: 'Usuario',
 }
+
+/* ------------------------- Planificador semanal ------------------------- */
+
+export type PlanSlot = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK'
+
+export const PLAN_SLOTS: { value: PlanSlot; label: string; icon: 'sunrise' | 'sun' | 'moon' | 'cookie' }[] = [
+  { value: 'BREAKFAST', label: 'Desayuno', icon: 'sunrise' },
+  { value: 'LUNCH', label: 'Comida', icon: 'sun' },
+  { value: 'DINNER', label: 'Cena', icon: 'moon' },
+  { value: 'SNACK', label: 'Snack', icon: 'cookie' },
+]
+
+export const PLAN_DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+export interface PlanRecipeSummary {
+  id: string
+  title: string
+  image: string
+  category: string
+  ingredients: string[]
+  prepTime: number
+  servings: number
+  author: RecipeAuthor
+}
+
+export interface PlanItemData {
+  id: string
+  day: number
+  slot: PlanSlot
+  recipe: PlanRecipeSummary
+}
+
+/* --------------------------- Perfil público ----------------------------- */
+
+export interface PublicProfileData {
+  user: {
+    id: string
+    name: string
+    role: Role
+    bio: string | null
+    createdAt: string
+    isProfessional: boolean
+  }
+  stats: {
+    recipes: number
+    avgRating: number
+    ratingsCount: number
+    favorites: number
+  }
+  recipes: RecipeCardData[]
+}

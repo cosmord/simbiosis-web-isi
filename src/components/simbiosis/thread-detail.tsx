@@ -136,11 +136,18 @@ export function ThreadDetail({ id }: { id: string }) {
           <h1 className="text-xl font-bold leading-snug tracking-tight sm:text-2xl">
             {data.thread.title}
           </h1>
-          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5">
             <UserAvatar name={data.author.name} role={data.author.role} className="size-9" />
             <div>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm font-semibold">{data.author.name}</span>
+                <button
+                  type="button"
+                  className="text-sm font-semibold outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => navigate('userProfile', { id: data.author.id })}
+                  aria-label={`Ver el perfil público de ${data.author.name}`}
+                >
+                  {data.author.name}
+                </button>
                 <RoleBadge role={data.author.role} />
               </div>
               <p className="text-xs text-muted-foreground">{relativeTime(data.thread.createdAt)}</p>
@@ -183,7 +190,14 @@ export function ThreadDetail({ id }: { id: string }) {
                     <div className="flex items-center gap-2.5">
                       <UserAvatar name={r.author.name} role={r.author.role} className="size-8" />
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm font-medium">{r.author.name}</span>
+                        <button
+                          type="button"
+                          className="text-sm font-medium outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => navigate('userProfile', { id: r.author.id })}
+                          aria-label={`Ver el perfil público de ${r.author.name}`}
+                        >
+                          {r.author.name}
+                        </button>
                         <RoleBadge role={r.author.role} />
                       </div>
                       <span className="ml-auto text-xs text-muted-foreground">
