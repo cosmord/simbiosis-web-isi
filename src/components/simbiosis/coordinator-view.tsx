@@ -291,6 +291,7 @@ const EMAIL_KIND_META: Record<string, { label: string; className: string }> = {
   ACCOUNT_APPROVED: { label: 'Cuenta aprobada', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   ACCOUNT_SUSPENDED: { label: 'Cuenta suspendida', className: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' },
   CONTENT_REMOVED: { label: 'Contenido retirado', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+  TEMPLATE_PUBLISHED: { label: 'Nueva plantilla', className: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
 }
 
 function EmailsPanel() {

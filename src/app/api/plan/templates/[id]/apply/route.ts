@@ -107,6 +107,14 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     })
   })
 
+  // Cuenta cuántas veces la comunidad ha aplicado esta plantilla (solo si el
+  // que aplica no es su autor: aplicar la propia no es «adopción»).
+  if (template.userId !== auth.user.id) {
+    db.planTemplate
+      .update({ where: { id }, data: { appliedCount: { increment: 1 } } })
+      .catch(() => undefined) // best-effort: no rompe la aplicación del plan
+  }
+
   return ok({
     applied: applied.length,
     removed: removedCount,

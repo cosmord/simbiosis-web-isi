@@ -402,6 +402,11 @@ async function main() {
   const comments = [
     { recipe: r1, user: paciente3, content: '¿Se puede congelar? Me gustaría hacer varias raciones.' },
     { recipe: r1, user: nutri, content: '¡Sí! Congélala en raciones individuales y descongela suavemente en la nevera.' },
+    { recipe: r1, user: cuidador, content: 'La preparo los domingos y así tengo raciones listas para toda la semana. Un básico en mi casa.' },
+    { recipe: r1, user: paciente2, content: 'El jengibre le da un punto estupendo y a mí me ayuda bastante con las náuseas. Muy recomendable en días flojos.' },
+    { recipe: r1, user: cuidador2, content: 'A mi hijo le encanta y es de los pocos purés que come sin queja. Gracias por compartirla.' },
+    { recipe: r1, user: medico, content: 'Composición muy razonable para reintroducir verduras: baja en residuos y con caldo casero. Bien en post-brote.' },
+    { recipe: r1, user: paciente, content: 'La hice anoche y me sentó de maravilla, hoy sin hinchazón. Repetiré seguro.' },
     { recipe: r2, user: cuidador2, content: 'La hice para mi madre y le sentó genial. Añadí un poco de perejil.' },
     { recipe: r4, user: paciente, content: 'Gracias por la receta, doctor. ¿Y si uso lubina en su lugar?' },
     { recipe: r5, user: paciente2, content: 'Con plátano muy maduro queda mucho más dulce, no hace falta azúcar.' },
@@ -413,7 +418,7 @@ async function main() {
         recipeId: c.recipe.id,
         userId: c.user.id,
         content: c.content,
-        createdAt: daysAgo(Math.floor(Math.random() * 8) + 1),
+        createdAt: daysAgo(Math.max(1, Math.floor(Math.random() * 8)) ),
       },
     })
   }
@@ -748,6 +753,8 @@ async function main() {
       description:
         'Menú semanal para mantener la remisión: cocciones sencillas, poca grasa, cenas ligeras y un dulce apto los fines de semana. Elaborado por el equipo de nutrición de Simbiosis.',
       isPublic: true,
+      publishedAt: daysAgo(3),
+      appliedCount: 12,
       days: JSON.stringify(nutriWeek.map(([day, slot, r]) => ({ day, slot, recipeId: r.id }))),
       userId: nutri.id,
       createdAt: daysAgo(3),
@@ -768,6 +775,8 @@ async function main() {
       description:
         'Plan orientativo para días de brote: caldos, purés y texturas suaves en raciones pequeñas. Es un apoyo temporal; sigue siempre las pautas de tu equipo médico.',
       isPublic: true,
+      publishedAt: daysAgo(2),
+      appliedCount: 5,
       days: JSON.stringify(medicoWeek.map(([day, slot, r]) => ({ day, slot, recipeId: r.id }))),
       userId: medico.id,
       createdAt: daysAgo(2),

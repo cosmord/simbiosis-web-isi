@@ -5,6 +5,7 @@ export type EmailKind =
   | 'ACCOUNT_APPROVED'
   | 'ACCOUNT_SUSPENDED'
   | 'CONTENT_REMOVED'
+  | 'TEMPLATE_PUBLISHED'
 
 export interface SendEmailInput {
   toUserId?: string | null

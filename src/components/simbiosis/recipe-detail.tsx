@@ -9,6 +9,7 @@ import {
   CalendarDays,
   CalendarPlus,
   Check,
+  ChevronDown,
   Clock,
   Flag,
   Heart,
@@ -92,7 +93,14 @@ function toDetailData(d: RecipeDetailResponse): RecipeDetailData {
   }
 }
 
-/** Detalle de receta: preparación, valoraciones, comentarios y acciones. */
+/**
+ * Detalle de receta: preparación, valoraciones, comentarios y acciones.
+ * Los comentarios se paginan de 5 en 5 (COMMENTS_PAGE) con un botón «Cargar más».
+ */
+
+/** Tamaño de página de la paginación de comentarios. */
+const COMMENTS_PAGE = 5
+
 export function RecipeDetail({ id }: { id: string }) {
   const { user, navigate, setAuthOpen, openReport, bumpRefresh } = useSimbiosis()
 
@@ -105,6 +113,9 @@ export function RecipeDetail({ id }: { id: string }) {
   const [savingRating, setSavingRating] = useState(false)
   const [comment, setComment] = useState('')
   const [postingComment, setPostingComment] = useState(false)
+  // Paginación de comentarios: se muestran de 5 en 5 para no saturar recetas
+  // con mucho debate. Al publicar uno nuevo se muestran todos.
+  const [visibleComments, setVisibleComments] = useState(COMMENTS_PAGE)
   const [favorite, setFavorite] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [planDay, setPlanDay] = useState('0')
@@ -133,6 +144,11 @@ export function RecipeDetail({ id }: { id: string }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Al cambiar de receta se reinicia la paginación de comentarios.
+  useEffect(() => {
+    setVisibleComments(COMMENTS_PAGE)
+  }, [id])
 
   async function toggleFavorite() {
     if (!user) {
@@ -194,6 +210,8 @@ export function RecipeDetail({ id }: { id: string }) {
       await api(`/api/recipes/${id}/comments`, jsonBody('POST', { content: comment.trim() }))
       setComment('')
       toast.success('Comentario publicado.')
+      // El comentario nuevo va al final (orden ascendente): se revelan todos.
+      setVisibleComments(Number.MAX_SAFE_INTEGER)
       await load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo publicar el comentario.')
@@ -449,47 +467,66 @@ export function RecipeDetail({ id }: { id: string }) {
               {data.comments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aún no hay comentarios.</p>
               ) : (
-                <ul className="space-y-4">
-                  {data.comments.map((c) => (
-                    <li key={c.id} className="flex gap-3">
-                      <UserAvatar name={c.author.name} role={c.author.role} className="size-8 shrink-0" />
-                      <div className="min-w-0 flex-1 space-y-1 rounded-lg bg-muted/50 px-3 py-2.5">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                          <span className="text-sm font-medium">{c.author.name}</span>
-                          <RoleBadge role={c.author.role} />
-                          <span className="ml-auto text-xs text-muted-foreground">
-                            {relativeTime(c.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-sm leading-relaxed">{c.content}</p>
-                        <div className="flex gap-3 pt-0.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => openReport('COMMENT', c.id)}
-                            aria-label={`Denunciar el comentario de ${c.author.name}`}
-                          >
-                            <Flag aria-hidden="true" className="size-3" />
-                            Denunciar
-                          </Button>
-                          {user && (user.id === c.author.id || user.role === 'COORDINATOR') && (
+                <>
+                  <ul className="space-y-4">
+                    {data.comments.slice(0, visibleComments).map((c) => (
+                      <li key={c.id} className="flex gap-3">
+                        <UserAvatar name={c.author.name} role={c.author.role} className="size-8 shrink-0" />
+                        <div className="min-w-0 flex-1 space-y-1 rounded-lg bg-muted/50 px-3 py-2.5">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="text-sm font-medium">{c.author.name}</span>
+                            <RoleBadge role={c.author.role} />
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              {relativeTime(c.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-sm leading-relaxed">{c.content}</p>
+                          <div className="flex gap-3 pt-0.5">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                              onClick={() => void deleteComment(c.id)}
-                              aria-label={`Eliminar el comentario de ${c.author.name}`}
+                              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => openReport('COMMENT', c.id)}
+                              aria-label={`Denunciar el comentario de ${c.author.name}`}
                             >
-                              <Trash2 aria-hidden="true" className="size-3" />
-                              Eliminar
+                              <Flag aria-hidden="true" className="size-3" />
+                              Denunciar
                             </Button>
-                          )}
+                            {user && (user.id === c.author.id || user.role === 'COORDINATOR') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                onClick={() => void deleteComment(c.id)}
+                                aria-label={`Eliminar el comentario de ${c.author.name}`}
+                              >
+                                <Trash2 aria-hidden="true" className="size-3" />
+                                Eliminar
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                  {visibleComments < data.comments.length && (
+                    <div className="flex flex-col items-center gap-1 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-h-9 gap-1.5"
+                        onClick={() => setVisibleComments((v) => v + COMMENTS_PAGE)}
+                      >
+                        <ChevronDown aria-hidden="true" className="size-4" />
+                        Cargar más comentarios ({data.comments.length - visibleComments})
+                      </Button>
+                      <p className="text-[11px] text-muted-foreground">
+                        Mostrando {Math.min(visibleComments, data.comments.length)} de{' '}
+                        {data.comments.length} comentarios
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

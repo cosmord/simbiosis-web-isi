@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   BadgeCheck,
+  BellRing,
   Bookmark,
   BookmarkCheck,
   CalendarDays,
@@ -25,6 +26,7 @@ import {
   Sun,
   Sunrise,
   Trash2,
+  TrendingUp,
   UtensilsCrossed,
   X,
 } from 'lucide-react'
@@ -1032,6 +1034,9 @@ export function PlanView() {
                             day: 'numeric',
                             month: 'short',
                           })}
+                          {typeof t.appliedCount === 'number' && t.appliedCount > 0 && (
+                            <> · aplicada {t.appliedCount} {t.appliedCount === 1 ? 'vez' : 'veces'} por la comunidad</>
+                          )}
                         </p>
                       </div>
                       {canPublish && (
@@ -1170,16 +1175,29 @@ export function PlanView() {
                                 {t.description}
                               </p>
                             )}
-                            <p className="mt-1 text-[11px] text-muted-foreground">
-                              {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'}
-                              {typeof t.dayCount === 'number' && (
-                                <> · {t.dayCount} {t.dayCount === 1 ? 'día' : 'días'} planificados</>
-                              )}
+                            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                              <span>
+                                {t.recipeCount} {t.recipeCount === 1 ? 'receta' : 'recetas'}
+                                {typeof t.dayCount === 'number' && (
+                                  <> · {t.dayCount} {t.dayCount === 1 ? 'día' : 'días'} planificados</>
+                                )}
+                              </span>
                               {' · '}
-                              {new Date(t.createdAt).toLocaleDateString('es-ES', {
-                                day: 'numeric',
-                                month: 'short',
-                              })}
+                              <span>
+                                {new Date(t.createdAt).toLocaleDateString('es-ES', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                })}
+                              </span>
+                              {typeof t.appliedCount === 'number' && t.appliedCount > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="gap-0.5 border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
+                                >
+                                  <TrendingUp aria-hidden="true" className="size-2.5" />
+                                  Aplicada {t.appliedCount} {t.appliedCount === 1 ? 'vez' : 'veces'}
+                                </Badge>
+                              )}
                             </p>
                           </div>
                           <Button
@@ -1235,6 +1253,13 @@ export function PlanView() {
               {publishDescription.length}/200
             </p>
           </div>
+          <p className="mt-1 flex w-full items-start gap-1.5 rounded-lg bg-primary/[0.06] px-2.5 py-2 text-left text-[11px] leading-snug text-muted-foreground">
+            <BellRing aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-primary" />
+            <span>
+              Al publicar, se avisará a toda la comunidad con una notificación y un correo para
+              que puedan aplicar tu plantilla.
+            </span>
+          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPublishDialog(null)} disabled={publishing}>
               Cancelar

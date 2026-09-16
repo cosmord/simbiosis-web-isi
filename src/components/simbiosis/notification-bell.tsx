@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   CheckCheck,
   Heart,
+  LayoutTemplate,
   MessageCircle,
   MessagesSquare,
   Reply,
@@ -43,6 +44,7 @@ const TYPE_META: Record<
   ACCOUNT: { icon: UserCheck, className: 'text-emerald-700 dark:text-emerald-300', ring: 'bg-emerald-100 dark:bg-emerald-950' },
   MODERATION: { icon: ShieldAlert, className: 'text-orange-700 dark:text-orange-300', ring: 'bg-orange-100 dark:bg-orange-950' },
   PLAN: { icon: CalendarCheck, className: 'text-lime-700 dark:text-lime-300', ring: 'bg-lime-100 dark:bg-lime-950' },
+  TEMPLATE: { icon: LayoutTemplate, className: 'text-violet-700 dark:text-violet-300', ring: 'bg-violet-100 dark:bg-violet-950' },
 }
 
 const VALID_LINK_VIEWS: View[] = ['recipeDetail', 'threadDetail', 'publications', 'recipes', 'forum', 'profile', 'plan']

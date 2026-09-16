@@ -420,6 +420,8 @@ export interface PlanTemplateData {
   isPublic?: boolean
   description?: string | null
   dayCount?: number
+  /** Veces que otros usuarios han aplicado la plantilla a su plan. */
+  appliedCount?: number
   /** Autor solo en las plantillas de la comunidad. */
   author?: PlanTemplateAuthor
 }

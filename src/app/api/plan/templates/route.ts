@@ -35,6 +35,7 @@ export async function GET() {
         name: t.name,
         description: t.description,
         isPublic: t.isPublic,
+        appliedCount: t.appliedCount,
         recipeCount: days.length,
         createdAt: t.createdAt.toISOString(),
       }

@@ -1,6 +1,8 @@
 import { db } from '@/lib/db'
 import { ok, fail, requireUser } from '@/lib/api-helpers'
 import { isProfessional } from '@/lib/auth'
+import { notifyManyAsync } from '@/lib/notify'
+import { sendEmailAsync } from '@/lib/emails'
 
 const MAX_DESCRIPTION = 200
 
@@ -13,6 +15,8 @@ const MAX_DESCRIPTION = 200
  * - Para publicar, el autor debe ser profesional (NUTRITIONIST/DOCTOR) o coordinador:
  *   así la galería garantiza plantillas validadas desde el punto de vista clínico.
  * - Al publicar se puede añadir una descripción breve (≤200 caracteres).
+ * - Al publicar por primera vez (o tras retirarla) se avisa a toda la comunidad
+ *   con una notificación in-app y un correo simulado (bandeja EmailLog).
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireUser()
@@ -63,10 +67,58 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return fail('Esta plantilla no tiene recetas guardadas y no se puede publicar.')
   }
 
+  const wasPublic = template.isPublic
+
   const updated = await db.planTemplate.update({
     where: { id },
-    data: { isPublic: publish, description },
+    data: { isPublic: publish, description, publishedAt: publish ? new Date() : template.publishedAt },
   })
+
+  // Al publicar (transición a público) se avisa a toda la comunidad activa:
+  // notificación in-app + correo simulado. Fire-and-forget, nunca rompe la respuesta.
+  if (publish && !wasPublic) {
+    const audience = await db.user.findMany({
+      where: { status: 'ACTIVE', id: { not: auth.user.id } },
+      select: { id: true, email: true, name: true },
+    })
+    const shortDesc = updated.description && updated.description.length > 120
+      ? `${updated.description.slice(0, 117)}…`
+      : updated.description ?? ''
+    const roleLabel =
+      auth.user.role === 'NUTRITIONIST'
+        ? 'nutricionista'
+        : auth.user.role === 'DOCTOR'
+          ? 'médico/a'
+          : 'coordinación'
+    notifyManyAsync(
+      audience.map((u) => ({
+        userId: u.id,
+        type: 'TEMPLATE' as const,
+        title: 'Nueva plantilla de menú en la comunidad',
+        body: `${auth.user.name} (${roleLabel}) ha publicado la plantilla «${updated.name}»${shortDesc ? `: ${shortDesc}` : '.'} Ya puedes aplicarla a tu plan semanal con un clic.`,
+        linkView: 'plan',
+      })),
+      auth.user.id
+    )
+    for (const u of audience) {
+      sendEmailAsync({
+        toUserId: u.id,
+        toEmail: u.email,
+        subject: `Nueva plantilla de menú en la comunidad: «${updated.name}»`,
+        body: `Hola ${u.name}:
+
+${auth.user.name} ha publicado una nueva plantilla de menú en la comunidad de Simbiosis:
+
+«${updated.name}»${shortDesc ? `\n${shortDesc}` : ''}
+
+Puedes aplicarla a tu plan semanal desde «Mi plan semanal» → «Mis plantillas» → pestaña «Comunidad».
+
+Un saludo,
+El equipo de Simbiosis`,
+        kind: 'TEMPLATE_PUBLISHED',
+      })
+    }
+  }
 
   return ok({ id: updated.id, isPublic: updated.isPublic, description: updated.description })
 }

@@ -31,6 +31,7 @@ export async function GET() {
         description: t.description,
         recipeCount: days.length,
         dayCount: new Set(days.map((d) => d.day)).size,
+        appliedCount: t.appliedCount,
         createdAt: t.createdAt.toISOString(),
         author: {
           id: t.user.id,

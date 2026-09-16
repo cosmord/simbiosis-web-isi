@@ -94,15 +94,17 @@ model MealPlanItem {
 // isPublic: las plantillas publicadas por profesionales aparecen en la galería
 // «Plantillas de la comunidad» para que cualquier usuario las aplique a su plan.
 model PlanTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  isPublic    Boolean  @default(false)
-  days        String   @default("[]")
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String    @id @default(cuid())
+  name         String
+  description  String?
+  isPublic     Boolean   @default(false)
+  publishedAt  DateTime? // última vez que se publicó en la comunidad (evita re-notificar sin motivo)
+  appliedCount Int       @default(0) // veces que otros usuarios han aplicado la plantilla a su plan
+  days         String    @default("[]")
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([userId, createdAt])
   @@index([isPublic, createdAt])
@@ -224,7 +226,7 @@ model Report {
 }
 
 // Notificaciones in-app:
-// type: REPLY | COMMENT | RATING | FAVORITE | LIKE | ACCOUNT | MODERATION
+// type: REPLY | COMMENT | RATING | FAVORITE | LIKE | ACCOUNT | MODERATION | PLAN | TEMPLATE
 // linkView/linkId alimentan la navegación SPA (deep link) al abrir la notificación.
 model Notification {
   id        String   @id @default(cuid())
@@ -244,7 +246,7 @@ model Notification {
 
 // Bandeja simulada de correos del sistema (condición de despliegue del doc v2.2:
 // «envío de mensajes de seguridad y notificaciones por correo electrónico»).
-// kind: ACCOUNT_RECEIVED | ACCOUNT_APPROVED | ACCOUNT_SUSPENDED | CONTENT_REMOVED
+// kind: ACCOUNT_RECEIVED | ACCOUNT_APPROVED | ACCOUNT_SUSPENDED | CONTENT_REMOVED | TEMPLATE_PUBLISHED
 // El destinatario se conserva aunque el usuario se elimine (onDelete: SetNull).
 model EmailLog {
   id        String   @id @default(cuid())
