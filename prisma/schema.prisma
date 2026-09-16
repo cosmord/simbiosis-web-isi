@@ -1,0 +1,184 @@
+// Proyecto Simbiosis — Plataforma colaborativa de recetas para pacientes con EII
+// Ingeniería del Software I — Documento de Visión y Alcance v2.2
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Roles: PATIENT | CAREGIVER | NUTRITIONIST | DOCTOR | COORDINATOR
+// Status: PENDING | ACTIVE | SUSPENDED
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  role           String   @default("PATIENT")
+  status         String   @default("PENDING")
+  bio            String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sessions      Session[]
+  recipes       Recipe[]
+  ratings       Rating[]
+  comments      Comment[]
+  threads       Thread[]
+  replies       Reply[]
+  publications  HealthPublication[]
+  pubLikes      PublicationLike[]
+  healthEntries HealthEntry[]
+  favorites     Favorite[]
+  reportsMade   Report[] @relation("Reporter")
+  reportsDone   Report[] @relation("Resolver")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ingredients/steps/tags/suitableFor se guardan como JSON string (SQLite no soporta listas)
+model Recipe {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  ingredients String   @default("[]")
+  steps       String   @default("[]")
+  image       String   @default("")
+  category    String   @default("Comida") // Desayuno | Comida | Cena | Snack | Postre
+  tags        String   @default("[]")
+  suitableFor String   @default("[]")
+  prepTime    Int      @default(30)
+  servings    Int      @default(2)
+  status      String   @default("PUBLISHED") // PUBLISHED | REMOVED
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  ratings   Rating[]
+  comments  Comment[]
+  favorites Favorite[]
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  stars     Int // 1..5
+  comment   String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId  String
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, recipeId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  status    String   @default("VISIBLE") // VISIBLE | REMOVED
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId  String
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+// Categorías foro: DIETA_Y_SINTOMAS | RECETAS_Y_COCINA | APOYO_EMOCIONAL | DUDAS_GENERALES
+model Thread {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  category  String   @default("DUDAS_GENERALES")
+  status    String   @default("VISIBLE") // VISIBLE | REMOVED
+  views     Int      @default(0)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  replies Reply[]
+}
+
+model Reply {
+  id        String   @id @default(cuid())
+  content   String
+  status    String   @default("VISIBLE")
+  threadId  String
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+// Categorías publicaciones: NUTRICION | ESTILO_DE_VIDA | BIENESTAR_EMOCIONAL | TRATAMIENTO
+model HealthPublication {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  category  String   @default("NUTRICION")
+  status    String   @default("PUBLISHED") // PUBLISHED | REMOVED
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  likes PublicationLike[]
+}
+
+model PublicationLike {
+  id            String            @id @default(cuid())
+  publicationId String
+  publication   HealthPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime          @default(now())
+
+  @@unique([publicationId, userId])
+}
+
+model HealthEntry {
+  id        String   @id @default(cuid())
+  date      DateTime
+  weight    Float?
+  symptoms  Int      @default(0) // 0..10 intensidad de síntomas
+  note      String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId  String
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, recipeId])
+}
+
+// targetType: RECIPE | COMMENT | THREAD | REPLY | PUBLICATION | USER
+// reason: CONTENIDO_INADECUADO | INFO_SALUD_RIESGOSA | SPAM | ACOSO | OTRO
+// status: OPEN | RESOLVED | DISMISSED
+model Report {
+  id           String   @id @default(cuid())
+  targetType   String
+  targetId     String
+  reason       String
+  details      String?
+  status       String   @default("OPEN")
+  resolution   String?
+  reporterId   String
+  reporter     User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedById String?
+  resolver     User?    @relation("Resolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+}

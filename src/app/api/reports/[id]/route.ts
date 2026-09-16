@@ -1,0 +1,104 @@
+import { NextRequest } from 'next/server'
+import { db } from '@/lib/db'
+import { ok, fail, requireCoordinator } from '@/lib/api-helpers'
+import {
+  removeContent,
+  authorOfContent,
+  suspendUserAndClearSessions,
+} from '@/lib/reports'
+
+const ACTIONS = ['DISMISS', 'REMOVE_CONTENT', 'SUSPEND_USER'] as const
+type ReportAction = (typeof ACTIONS)[number]
+
+/**
+ * PATCH /api/reports/[id] — solo coordinador.
+ * Body: { resolution: "DISMISS" | "REMOVE_CONTENT" | "SUSPEND_USER", note? }
+ */
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { user: coordinator, error } = await requireCoordinator()
+  if (error) return error
+
+  const { id } = await params
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return fail('El cuerpo de la petición no es válido.', 400)
+  }
+
+  const { resolution, note } = (body ?? {}) as Record<string, unknown>
+  if (typeof resolution !== 'string' || !ACTIONS.includes(resolution as ReportAction)) {
+    return fail('La resolución indicada no es válida.', 400)
+  }
+
+  const report = await db.report.findUnique({ where: { id } })
+  if (!report) return fail('Denuncia no encontrada.', 404)
+  if (report.status !== 'OPEN') {
+    return fail('Esta denuncia ya ha sido gestionada.', 400)
+  }
+
+  const cleanNote = typeof note === 'string' && note.trim().length > 0 ? note.trim() : null
+  let status = 'RESOLVED'
+  let resolutionText: string
+
+  if (resolution === 'DISMISS') {
+    status = 'DISMISSED'
+    resolutionText = cleanNote ?? 'Denuncia desestimada.'
+  } else if (resolution === 'REMOVE_CONTENT') {
+    if (report.targetType === 'USER') {
+      const targetUser = await db.user.findUnique({ where: { id: report.targetId } })
+      if (targetUser && targetUser.role === 'COORDINATOR') {
+        return fail('No puedes suspender cuentas de coordinador.', 403)
+      }
+      if (targetUser) {
+        await suspendUserAndClearSessions(report.targetId)
+      }
+    } else {
+      await removeContent(report.targetType, report.targetId)
+    }
+    resolutionText = cleanNote ?? 'Contenido eliminado por el coordinador.'
+  } else {
+    // SUSPEND_USER: si el objetivo es un usuario se suspende directamente;
+    // si es contenido, se suspende a su autor.
+    const userId =
+      report.targetType === 'USER'
+        ? report.targetId
+        : await authorOfContent(report.targetType, report.targetId)
+
+    if (userId) {
+      const targetUser = await db.user.findUnique({ where: { id: userId } })
+      if (targetUser && targetUser.role === 'COORDINATOR') {
+        return fail('No puedes suspender cuentas de coordinador.', 403)
+      }
+      if (targetUser) {
+        await suspendUserAndClearSessions(userId)
+      }
+    }
+    resolutionText = cleanNote ?? 'Usuario suspendido por el coordinador.'
+  }
+
+  const updated = await db.report.update({
+    where: { id },
+    data: { status, resolution: resolutionText, resolvedById: coordinator.id },
+    include: {
+      reporter: { select: { id: true, name: true, role: true } },
+      resolver: { select: { id: true, name: true } },
+    },
+  })
+
+  return ok({
+    report: {
+      id: updated.id,
+      targetType: updated.targetType,
+      targetId: updated.targetId,
+      reason: updated.reason,
+      details: updated.details,
+      status: updated.status,
+      resolution: updated.resolution,
+      createdAt: updated.createdAt.toISOString(),
+      reporter: updated.reporter,
+      resolvedBy: updated.resolver,
+    },
+  })
+}
